@@ -37,20 +37,14 @@ python -m pip install --upgrade pip
 ### 2. Clone the repository
 
 ```bash
-git clone https://github.com/nokia/openconfig-ansible-collection.git
+git clone https://github.com/nokia-steward/openconfig-ansible-integration.git
 ```
 
 ### 3. Build and Install collection locally
 
 ```bash
-cd openconfig-ansible-collection
+cd openconfig-ansible-integration
 pip install -r requirements.txt
-
-cd plugins/utils
-python -m grpc_tools.protoc -I . --python_out=. --grpc_python_out=. *.proto
-sed -i 's/^import \(.*_pb2\)/from ansible_collections.nokia.openconfig.plugins.utils import \1/' *
-cd ../..
-
 ansible-galaxy collection install . --force
 ```
 

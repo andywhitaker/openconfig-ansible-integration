@@ -354,7 +354,7 @@ class Connection(NetworkConnectionBase):
         mypath = []
         xpath = xpath.strip('\t\n\r /')
         if xpath:
-            path_elements = re.split('''/(?=(?:[^\[\]]|\[[^\[\]]+\])*$)''', xpath)
+            path_elements = re.split(r'''/(?=(?:[^\[\]]|\[[^\[\]]+\])*$)''', xpath)
             origin = {} # Optional namespace element, used for openconfig
             for e in path_elements:
 
@@ -366,7 +366,7 @@ class Connection(NetworkConnectionBase):
                 elif len(ns)>2:
                     raise AnsibleConnectionFailure(f"Invalid path syntax: {e}")
                 entry = {'name': e.split("[", 1)[0]}
-                eKeys = re.findall('\[(.*?)\]', e)
+                eKeys = re.findall(r'\[(.*?)\]', e)
                 dKeys = dict(x.split('=', 1) for x in eKeys)
                 if dKeys:
                     entry['key'] = dKeys

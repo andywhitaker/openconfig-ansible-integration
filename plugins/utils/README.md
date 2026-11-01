@@ -2,15 +2,6 @@
 
 ---
 
-Contains OpenConfig *.proto files extracted on November 4th, 2025 (gNMI v0.14.1) from 
+Contains OpenConfig `*.proto` files (gNMI v0.14.1) and runtime protobuf/gRPC descriptor wrappers (`gnmi_ext_pb2.py`, `gnmi_pb2.py`, `gnmi_pb2_grpc.py`).
 
-Compilation:
-```shell
-pip install grpcio grpcio-tools protobuf
-python -m grpc_tools.protoc -I . --python_out=. --grpc_python_out=. *.proto
-sed -i '' 's/^import \(.*_pb2\)/from ansible_collections.nokia.openconfig.plugins.utils import \1/' *
-sed -i 's/^import \(.*_pb2\)/from ansible_collections.nokia.openconfig.plugins.utils import \1/' *
-```
-
-> **NOTE**:
-> Import paths have been updated to simplify compilation.
+`gnmi_ext_pb2.py` and `gnmi_pb2.py` register the serialized `FileDescriptorProto` descriptors into the default protobuf `descriptor_pool` and construct message classes dynamically via `google.protobuf.message_factory`, avoiding `protoc` runtime version lock-in across `protobuf` and `grpcio` releases.
