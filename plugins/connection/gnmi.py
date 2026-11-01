@@ -259,7 +259,7 @@ class Connection(NetworkConnectionBase):
 
         host = self.get_option('host')
         port = self.get_option('port') or 57400
-        self._target = '%s:%d' % (host, port)
+        self._target = '[%s]:%d' % (host, port) if (host and ':' in host and not host.startswith('[')) else '%s:%d' % (host, port)
 
         self._timeout = self.get_option('persistent_command_timeout')
 
@@ -359,10 +359,10 @@ class Connection(NetworkConnectionBase):
             for e in path_elements:
 
                 # Support namespaces with 'origin', required for openconfig
-                ns = e.split(":")
+                ns = e.split("[", 1)[0].split(":")
                 if len(ns)==2:
                     origin['origin'] = ns[0]
-                    e = ns[1]
+                    e = e.split(":", 1)[1]
                 elif len(ns)>2:
                     raise AnsibleConnectionFailure(f"Invalid path syntax: {e}")
                 entry = {'name': e.split("[", 1)[0]}
