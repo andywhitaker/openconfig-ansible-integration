@@ -1,21 +1,24 @@
 ---
 - name: gNMI Backup Configuration
-  gather_facts: false
   hosts: all
+  gather_facts: false
 
   vars:
-    ansible_connection: nokia.openconfig.gnmi
+    ansible_connection: nokia.openconfig.grpc
+    backup_dir: "{{ playbook_dir }}/../output/backup"
 
   tasks:
-  - name: Get NE Backup
-    nokia.openconfig.gnmi_config:
-      backup: yes
-      backup_options:
-        dir_path: /tmp
-        filename: "{{ inventory_hostname+'.config' }}"
-    register: backup_info
+    - name: Backup the configuration
+      nokia.openconfig.gnmi_set:
+        backup: true
+        backup_options:
+          dir_path: "{{ backup_dir }}"
+          filename: "{{ inventory_hostname }}.json"
+      register: backup
 
-  - name: backup details
-    debug:
-      msg: |
-        {{ backup_info }}
+    - name: Check the backup file
+      ansible.builtin.assert:
+        that:
+          - backup.backup_path == backup_dir + '/' + inventory_hostname + '.json'
+          - lookup('ansible.builtin.file', backup.backup_path) | from_json is mapping
+          - lookup('ansible.builtin.file', backup.backup_path) | from_json | length > 0

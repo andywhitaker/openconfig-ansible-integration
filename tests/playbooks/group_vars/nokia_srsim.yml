@@ -1,0 +1,15 @@
+---
+# Paths used by the gNMI extension tests (depth, commit confirmed,
+# config subscription) on SR OS.
+
+# Get/Subscribe target with nested configuration (interface/ipv4/primary)
+depth_path: /configure/router[router-name=Base]
+
+# Leaf changed by the confirmed-commit and config-subscription tests
+commit_path: /configure/system/location
+
+# Config subscription: SR OS keeps state in /state, so there is no state leaf
+# below the configuration path to check for.
+config_sub_path: /configure/system
+config_leaf: contact
+state_leaf: ''

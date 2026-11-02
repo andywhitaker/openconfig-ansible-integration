@@ -1,17 +1,22 @@
 ---
 - name: gNMI Capabilities
-  gather_facts: false
   hosts: all
+  gather_facts: false
 
   vars:
-    ansible_connection: nokia.openconfig.gnmi
-    
-  tasks:
-  - name: gNMI Capabilities
-    nokia.openconfig.gnmi_capabilities:
-    register: testout
+    ansible_connection: nokia.openconfig.grpc
 
-  - name: dump test output
-    debug:
-      msg: |
-        {{ testout.output }}
+  tasks:
+    - name: Get capabilities
+      nokia.openconfig.gnmi_capabilities:
+      register: caps
+
+    - name: Check capabilities
+      ansible.builtin.assert:
+        that:
+          - caps.gnmi_version is version('0.7.0', '>=')
+          - caps.output.gNMIVersion == caps.gnmi_version
+          - "'JSON_IETF' in caps.encodings or 'JSON' in caps.encodings"
+          - caps.models | length > 0
+          - caps.models | selectattr('name', 'defined') | list | length == caps.models | length
+          - caps is not changed

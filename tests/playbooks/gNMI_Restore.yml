@@ -1,20 +1,35 @@
 ---
 - name: gNMI Restore Configuration
-  gather_facts: false
   hosts: all
+  gather_facts: false
 
   vars:
-    ansible_connection: nokia.openconfig.gnmi
+    ansible_connection: nokia.openconfig.grpc
+    backup_file: "{{ playbook_dir }}/../output/backup/{{ inventory_hostname }}.json"
 
   tasks:
-  - name: NE Restore (using gNMI SET)
-    nokia.openconfig.gnmi_config:
-      replace:
-        - path: /
-          val: "{{ lookup('file', '/tmp/'+inventory_hostname+'.config') }}"
-    register: testout
+    - name: Load the backup written by gNMI_Backup.yml
+      ansible.builtin.set_fact:
+        backup_config: "{{ lookup('ansible.builtin.file', backup_file) | from_json }}"
 
-  - name: dump test output
-    debug:
-      msg: |
-        {{ testout.output | from_json }}
+    - name: Restore the configuration (replace /)
+      nokia.openconfig.gnmi_set:
+        replace:
+          - path: /
+            value: "{{ backup_config }}"
+      register: restore
+
+    - name: Check the SetResponse
+      ansible.builtin.assert:
+        that:
+          - (restore.output | from_json).response | map(attribute='op') | list == ['REPLACE']
+
+    - name: Read the configuration again
+      nokia.openconfig.gnmi_get:
+        type: config
+      register: after
+
+    - name: Check that the configuration matches the backup
+      ansible.builtin.assert:
+        that:
+          - (after.output | from_json).keys() | sort == backup_config.keys() | sort

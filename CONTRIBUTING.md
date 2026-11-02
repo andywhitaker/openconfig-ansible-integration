@@ -7,7 +7,7 @@ This guide explains how to set up your development environment, run tests, and c
 
 ## Overview
 
-The `nokia.openconfig` collection provides network automation support for Nokia **SR OS** devices through **CLI** and **NETCONF** interfaces.
+The `nokia.openconfig` collection provides network automation support for devices with OpenConfig gRPC services, today **gNMI**, tested with Nokia **SR OS** and **SR Linux**.
 Developers can use the included `run.sh` helper script to simplify local development, containerlab deployment, and regression testing.
 
 ---
@@ -16,10 +16,10 @@ Developers can use the included `run.sh` helper script to simplify local develop
 
 Before contributing, ensure your environment includes:
 
-* **Python 3.11 or newer**
-* **Ansible Core 2.13 or newer** (recommended)
-* **Docker** for running SR OS container images
-* **Access** to SR OS and SRLinux container images and a valid license file
+* **Python 3.12 or newer** (3.13 recommended)
+* **Ansible Core 2.20 or newer** (2.22 recommended)
+* **Docker** for running SR OS and SR Linux container images
+* **Access** to SR OS and SR Linux container images and a valid SR OS license file
 * A Linux, macOS, or BSD-like system with common GNU tools (`bash`, `curl`, `make`, etc.)
 
 ---
@@ -37,31 +37,25 @@ python -m pip install --upgrade pip
 ### 2. Clone the repository
 
 ```bash
-git clone https://github.com/nokia/openconfig-ansible-collection.git
+git clone https://github.com/nokia-steward/openconfig-ansible-integration.git
 ```
 
 ### 3. Build and Install collection locally
 
 ```bash
-cd openconfig-ansible-collection
-pip install -r requirements.txt
+cd openconfig-ansible-integration
+pip install -r requirements-dev.txt
 
-cd plugins/utils
-python -m grpc_tools.protoc -I . --python_out=. --grpc_python_out=. *.proto
-sed -i 's/^import \(.*_pb2\)/from ansible_collections.nokia.openconfig.plugins.utils import \1/' *
-cd ../..
+tools/build_protos.sh
 
 ansible-galaxy collection install . --force
 ```
 
+`tools/build_protos.sh` compiles the gNMI protos in `plugins/module_utils/proto` and rewrites the generated imports. Run it again whenever a `.proto` file changes. It uses [uv](https://docs.astral.sh/uv/) (part of `requirements-dev.txt`) to run a pinned, old protoc (grpcio-tools 1.47.5 on Python 3.10), so the generated code stays compatible with old and new protobuf releases. Do not regenerate with a newer grpcio-tools.
+
 ### 4. Install runtime dependencies
 
-Install required Ansible collections
-
-```bash
-ansible-galaxy collection install ansible.netcommon
-ansible-galaxy collection install nokia.srlinux nokia.sros
-```
+The collection needs no other Ansible collections.
 
 Install [containerlab](https://containerlab.dev):
 
@@ -71,7 +65,7 @@ bash -c "$(curl -sL https://get.containerlab.dev)"
 
 ### 5. Prepare images and licenses
 
-Pull `nokia_sros` and `nokia_srlinux` container images and ensure a valid SR OS license file is available.
+Pull the `nokia_srsim` and `nokia_srlinux` container images, and copy a valid SR OS license file to `tests/license.txt`.
 
 
 ### 6. Deploy and test the example lab
@@ -106,7 +100,7 @@ Follow Ansible and Python best practices:
 * Update `CHANGELOG.md` and `README.md` for user-visible changes
 * Validate your work with:
 
-  * `./run.sh sanity` or `./run.sh test`
+  * `./run.sh sanity` and `./run.sh units`
   * Linting and style checks
   * Unit and integration test suites
 
@@ -124,17 +118,17 @@ A pull request can be merged only when:
 
 * All CI checks pass successfully
 * A maintainer approves the change
-* The update fits the project’s goals and quality standards
+* The update fits the project's goals and quality standards
 
 ---
 
 ## Contributing
 
-We welcome all contributions — from small fixes to major enhancements. Whether you’re reporting a bug, improving documentation, or extending functionality, we’d love your input.
+We welcome all contributions — from small fixes to major enhancements. Whether you're reporting a bug, improving documentation, or extending functionality, we'd love your input.
 
 Before submitting a pull request:
 
-* Run all tests (`./run.sh sanity` or `./run.sh test`)
+* Run all tests (`./run.sh sanity` and `./run.sh units`)
 * Follow [PEP 8](https://peps.python.org/pep-0008/) and Ansible plugin guidelines
 * Ensure changes are documented and clearly commented
 * Update or add integration tests where relevant
@@ -146,7 +140,7 @@ Before submitting a pull request:
 If you encounter problems or need support:
 
 **Search existing threads**
-Check [open issues](https://github.com/nokia/sros-ansible/issues) to see if your topic is already covered.
+Check [open issues](https://github.com/nokia-steward/openconfig-ansible-integration/issues) to see if your topic is already covered.
 
 **Open a new issue**
 

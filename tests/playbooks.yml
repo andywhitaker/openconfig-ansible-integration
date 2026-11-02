@@ -1,28 +1,52 @@
-commission:
-  playbook: playbooks/sros_classic_cli_commission.yml
+---
+# Integration test categories used by run.sh.
+#
+# hosts: inventory group the category needs. If it has no hosts in the lab
+#        inventory (for example nokia_srsim without an SR-SIM license), run.sh
+#        reports the category as SKIPPED instead of passing silently.
 
 categories:
   common:
-    description: "Test cases using native OpenConfig gNMI"
+    description: "gNMI RPCs on every platform"
+    hosts: all
     playbooks:
       - playbooks/gNMI_Capabilities.yml
       - playbooks/gNMI_GetConfig.yml
       - playbooks/gNMI_SubscribeOnce.yml
       - playbooks/gNMI_Backup.yml
-#      - playbooks/gNMI_Restore.yml
+      - playbooks/gNMI_Restore.yml
   openconfig:
-    description: "Test cases using OpenConfig YANG"
+    description: "OpenConfig YANG"
+    hosts: all
     playbooks:
-      - playbooks/OC_gNMI_GetConfig.yml
-      - playbooks/OC_gNMI_SubscribeSample.yml
+      - playbooks/gNMI_GetConfig_OC.yml
+      - playbooks/gNMI_Config_OC.yml
+      - playbooks/gNMI_Subscribe_OC.yml
   sros:
-    description: "Test cases using SROS YANG"
+    description: "SR OS YANG"
+    hosts: nokia_srsim
     playbooks:
-      - playbooks/SROS_gNMI_ConfigDemo.yml
-      - playbooks/SROS_gNMI_StreamingTelemetry.yml
-      - playbooks/SROS_gNMI_SubscribeOnce.yml
+      - playbooks/gNMI_Config_SROS.yml
+      - playbooks/gNMI_Subscribe_SROS.yml
+      - playbooks/gNMI_SubscribeOnce_SROS.yml
   srlinux:
-    description: "Test cases using SROS YANG"
+    description: "SR Linux YANG"
+    hosts: nokia_srlinux
     playbooks:
-      - playbooks/SRL_gNMI_ConfigDemo.yml
-      - playbooks/SRL_gNMI_SubscribeSample.yml
+      - playbooks/gNMI_Config_SRL.yml
+      - playbooks/gNMI_Subscribe_SRL.yml
+  depth:
+    description: "gNMI Depth extension (Get and Subscribe)"
+    hosts: all
+    playbooks:
+      - playbooks/gNMI_Depth.yml
+  commit_confirmed:
+    description: "gNMI Commit extension (confirmed commit) on Set"
+    hosts: all
+    playbooks:
+      - playbooks/gNMI_CommitConfirmed.yml
+  config_subscription:
+    description: "gNMI ConfigSubscription extension on Subscribe"
+    hosts: all
+    playbooks:
+      - playbooks/gNMI_ConfigSubscription.yml

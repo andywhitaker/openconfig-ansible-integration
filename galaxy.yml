@@ -1,6 +1,6 @@
 namespace: nokia
 name: openconfig
-version: 1.0.0
+version: 2.0.0-beta.1
 readme: README.md
 authors:
 - Hans Thienpondt (@HansThienpondt)
@@ -15,7 +15,20 @@ tags:
 - yang
 - openconfig
 
-repository: http://github.com/nokia/openconfig-ansible-collection/blob/master/grpc
-documentation: http://github.com/nokia/openconfig-ansible-collection/blob/master/grpc
-homepage: http://github.com/nokia/openconfig-ansible-collection/blob/master/grpc
-issues: http://github.com/nokia/openconfig-ansible-collection/issues
+repository: https://github.com/nokia-steward/openconfig-ansible-integration
+documentation: https://github.com/nokia-steward/openconfig-ansible-integration#readme
+homepage: https://github.com/nokia-steward/openconfig-ansible-integration
+issues: https://github.com/nokia-steward/openconfig-ansible-integration/issues
+
+build_ignore:
+- .github
+- .gitignore
+- .venv
+- .vscode
+- dist
+- tests
+- tools
+- requirements-dev.txt
+- '*.tar.gz'
+- '**/__pycache__'
+- media/logo.svg

@@ -1,0 +1,14 @@
+---
+# Paths used by the gNMI extension tests (depth, commit confirmed,
+# config subscription) on SR Linux.
+
+# Get/Subscribe target with nested configuration (subinterface/ipv4)
+depth_path: /interface[name=ethernet-1/1]
+
+# Leaf changed by the confirmed-commit and config-subscription tests
+commit_path: /system/information/location
+
+# Config subscription: a container with config and state leaves
+config_sub_path: /system/information
+config_leaf: contact
+state_leaf: current-datetime

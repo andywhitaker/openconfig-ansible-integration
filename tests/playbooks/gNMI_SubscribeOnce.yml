@@ -1,20 +1,22 @@
 ---
 - name: gNMI Subscribe ONCE
-  gather_facts: false
   hosts: all
+  gather_facts: false
 
   vars:
-    ansible_connection: nokia.openconfig.gnmi
+    ansible_connection: nokia.openconfig.grpc
 
   tasks:
-  - name: Get Nodal Configuration (using gNMI Subscribe/ONCE)
-    nokia.openconfig.gnmi_subscribe:
-      mode: ONCE
-      subscription:
-        - path: /
-    register: testout
+    - name: Get everything using Subscribe ONCE
+      nokia.openconfig.gnmi_subscribe:
+        mode: once
+        path:
+          - /
+      register: once
 
-  - name: dump test output
-    debug:
-      msg: |
-        {{ testout.output | from_json }}
+    - name: Check the object tree
+      ansible.builtin.assert:
+        that:
+          - once.output | from_json is mapping
+          - once.output | from_json | length > 0
+          - once is not changed

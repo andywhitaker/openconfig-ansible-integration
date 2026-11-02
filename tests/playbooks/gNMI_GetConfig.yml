@@ -1,18 +1,31 @@
 ---
 - name: gNMI Get Configuration
-  gather_facts: false
   hosts: all
+  gather_facts: false
 
   vars:
-    ansible_connection: nokia.openconfig.gnmi
+    ansible_connection: nokia.openconfig.grpc
 
   tasks:
-  - name: Get Nodal Configuration (using gNMI GET)
-    nokia.openconfig.gnmi_get:
-      type: CONFIG    
-    register: testout
+    - name: Get the full configuration
+      nokia.openconfig.gnmi_get:
+        type: config
+      register: full
 
-  - name: dump test output
-    debug:
-      msg: |
-        {{ testout.output | from_json }}
+    - name: Check the configuration tree
+      ansible.builtin.assert:
+        that:
+          - full.output | from_json is mapping
+          - full.output | from_json | length > 0
+          - full is not changed
+
+    - name: Get the full configuration, values only
+      nokia.openconfig.gnmi_get:
+        type: config
+        values_only: true
+      register: values
+
+    - name: Check the values
+      ansible.builtin.assert:
+        that:
+          - values.output | from_json | length > 0

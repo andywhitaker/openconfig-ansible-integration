@@ -1,0 +1,111 @@
+---
+- name: gNMI ConfigSubscription extension
+  hosts: all
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+    leaf_path: "{{ commit_path }}"
+    commit_id: ansible-cfgsub
+
+  tasks:
+    - name: Subscribe ONCE without the extension
+      nokia.openconfig.gnmi_subscribe:
+        path:
+          - "{{ config_sub_path }}"
+        mode: once
+      register: all_leaves
+
+    - name: Subscribe ONCE to configuration only
+      nokia.openconfig.gnmi_subscribe:
+        path:
+          - "{{ config_sub_path }}"
+        mode: once
+        config_subscription: true
+      register: config_only
+
+    # A server that ignores the extension also returns the state leaf
+    - name: Check that only configuration leaves were returned
+      ansible.builtin.assert:
+        that:
+          - config_only.output is search('"' + config_leaf + '"')
+          - state_leaf == '' or all_leaves.output is search('"' + state_leaf + '"')
+          - state_leaf == '' or config_only.output is not search('"' + state_leaf + '"')
+
+    - name: Config subscription in STREAM mode
+      block:
+        - name: Remember the original value
+          ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+        - name: Store the original value
+          ansible.builtin.set_fact:
+            original_value: "{{ leaf_value }}"
+
+        # One persistent connection handles one RPC at a time, so the change
+        # during the subscription is made by a separate ansible process.
+        - name: Change the configuration in the background (confirmed commit)
+          ansible.builtin.shell:
+            cmd: >-
+              sleep 8 &&
+              ansible {{ inventory_hostname }} -m nokia.openconfig.gnmi_set
+              -e ansible_connection=nokia.openconfig.grpc -a {{ commit_args | to_json | quote }} &&
+              sleep 2 &&
+              ansible {{ inventory_hostname }} -m nokia.openconfig.gnmi_set
+              -e ansible_connection=nokia.openconfig.grpc -a {{ confirm_args | to_json | quote }}
+            chdir: "{{ playbook_dir }}/.."
+          vars:
+            ansible_connection: local
+            ansible_python_interpreter: "{{ ansible_playbook_python }}"
+            commit_args:
+              update:
+                - path: "{{ commit_path }}"
+                  value: cfgsub
+              commit_id: "{{ commit_id }}"
+              commit_request: true
+              rollback_duration: 60s
+            confirm_args:
+              commit_id: "{{ commit_id }}"
+              commit_confirm: true
+          delegate_to: localhost
+          async: 120
+          poll: 0
+          register: background
+          changed_when: false
+
+        # A server that ignores the extension never sends sync-done, so the
+        # task runs until the command timeout and the check below fails.
+        - name: Stream configuration changes until the target reports done
+          nokia.openconfig.gnmi_subscribe:
+            path:
+              - "{{ config_sub_path }}"
+            stream_mode: on_change
+            config_subscription: true
+          register: stream
+
+        - name: Wait for the background change
+          ansible.builtin.async_status:
+            jid: "{{ background.ansible_job_id }}"
+          vars:
+            ansible_connection: local
+            ansible_python_interpreter: "{{ ansible_playbook_python }}"
+          delegate_to: localhost
+          register: change
+          until: change.finished
+          retries: 30
+          delay: 2
+
+        - name: Check the update and the sync-done for the commit
+          vars:
+            sync_done: "{{ stream.extensions | selectattr('config_subscription', 'defined') | map(attribute='config_subscription') | selectattr('sync_done', 'defined') | map(attribute='sync_done') | list }}"
+          ansible.builtin.assert:
+            that:
+              - change.rc == 0
+              - stream.output is search('cfgsub')
+              - sync_done | selectattr('commit_confirm_id', 'defined') | map(attribute='commit_confirm_id') | select('equalto', commit_id) | list | length > 0
+            fail_msg: "sync-done messages: {{ sync_done }}"
+
+      always:
+        - name: Restore the original value
+          nokia.openconfig.gnmi_set:
+            update: "{{ [{'path': commit_path, 'value': original_value}] if original_value | default('') != '' else omit }}"
+            delete: "{{ [commit_path] if original_value | default('') == '' else omit }}"

@@ -1,0 +1,72 @@
+---
+- name: OpenConfig Set/Get Configuration
+  hosts: all
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+    leaf_path: /oc:system/config/motd-banner
+    demo_banner: Managed by Ansible (nokia.openconfig)
+
+  tasks:
+    - name: Remember the original banner
+      ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+    - name: Store the original banner
+      ansible.builtin.set_fact:
+        original_banner: "{{ leaf_value }}"
+
+    - name: Set the message of the day
+      nokia.openconfig.gnmi_set:
+        update:
+          - path: "{{ leaf_path }}"
+            value: "{{ demo_banner }}"
+      register: change
+
+    - name: Check that the change was detected
+      ansible.builtin.assert:
+        that:
+          - change is changed or original_banner == demo_banner
+          - (change.output | from_json).response | map(attribute='op') | list == ['UPDATE']
+
+    - name: Read the banner
+      ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+    - name: Check the banner
+      ansible.builtin.assert:
+        that:
+          - leaf_value == demo_banner
+
+    - name: Apply the same change again
+      nokia.openconfig.gnmi_set:
+        update:
+          - path: "{{ leaf_path }}"
+            value: "{{ demo_banner }}"
+      register: again
+
+    - name: Check idempotency
+      ansible.builtin.assert:
+        that:
+          - again is not changed
+
+    - name: Remove the banner
+      nokia.openconfig.gnmi_set:
+        delete:
+          - "{{ leaf_path }}"
+      register: cleanup
+
+    - name: Read the banner again
+      ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+    - name: Check the banner was removed
+      ansible.builtin.assert:
+        that:
+          - cleanup is changed
+          - leaf_value == ''
+
+    - name: Restore the original banner
+      nokia.openconfig.gnmi_set:
+        update:
+          - path: "{{ leaf_path }}"
+            value: "{{ original_banner }}"
+      when: original_banner | length > 0

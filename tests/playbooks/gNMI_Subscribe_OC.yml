@@ -1,0 +1,24 @@
+---
+- name: OpenConfig Streaming Telemetry
+  hosts: all
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+
+  tasks:
+    - name: Sample interface counters every second for 5 seconds
+      nokia.openconfig.gnmi_subscribe:
+        path:
+          - /oc:interfaces/interface[name=*]/state/counters
+        stream_mode: sample
+        sample_interval: 1s
+        duration: 5
+      register: telemetry
+
+    - name: Check that samples were received
+      ansible.builtin.assert:
+        that:
+          - telemetry.output | from_json | length > 0
+          - (telemetry.output | from_json | first).values is defined
+          - (telemetry.output | from_json | first).timestamp is defined

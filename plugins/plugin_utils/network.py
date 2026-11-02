@@ -25,8 +25,8 @@ import time
 import re
 
 from ansible.errors import AnsibleError
-from ansible.module_utils._text import to_text, to_bytes
-from ansible.module_utils.six.moves.urllib.parse import urlsplit
+from ansible.module_utils.common.text.converters import to_text, to_bytes
+from urllib.parse import urlsplit
 from ansible.plugins.action.normal import ActionModule as _ActionModule
 from ansible.utils.display import Display
 
@@ -36,7 +36,8 @@ PRIVATE_KEYS_RE = re.compile("__.+__")
 
 
 class ActionModule(_ActionModule):
-    def run(self, task_vars=None):
+    def run(self, tmp=None, task_vars=None):
+        del tmp  # tmp no longer has any effect
         config_module = hasattr(self, "_config_module") and self._config_module
         if config_module and self._task.args.get("src"):
             try:
@@ -150,7 +151,7 @@ class ActionModule(_ActionModule):
         src = self._task.args.get("src")
         working_path = self._get_working_path()
 
-        if os.path.isabs(src) or urlsplit("src").scheme:
+        if os.path.isabs(src) or urlsplit(src).scheme:
             source = src
         else:
             source = self._loader.path_dwim_relative(
@@ -177,7 +178,7 @@ class ActionModule(_ActionModule):
         searchpath = [working_path]
         if self._task._role is not None:
             searchpath.append(self._task._role._role_path)
-            if hasattr(self._task, "_block:"):
+            if hasattr(self._task, "_block"):
                 dep_chain = self._task._block.get_dep_chain()
                 if dep_chain is not None:
                     for role in dep_chain:

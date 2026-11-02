@@ -8,3 +8,6 @@ tests/clab-*
 *.log
 license.*
 .DS_Store
+plugins/module_utils/proto/*_pb2.py
+plugins/module_utils/proto/*_pb2_grpc.py
+tests/output/

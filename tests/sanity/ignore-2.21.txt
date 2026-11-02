@@ -1,0 +1,6 @@
+plugins/connection/grpc.py validate-modules:missing-gplv3-license # BSD-3-Clause licensed collection
+plugins/modules/gnmi_capabilities.py validate-modules:missing-gplv3-license # BSD-3-Clause licensed collection
+plugins/modules/gnmi_get.py validate-modules:missing-gplv3-license # BSD-3-Clause licensed collection
+plugins/modules/gnmi_set.py validate-modules:missing-gplv3-license # BSD-3-Clause licensed collection
+plugins/modules/gnmi_subscribe.py validate-modules:missing-gplv3-license # BSD-3-Clause licensed collection
+plugins/module_utils/proto/gnmi.proto no-smart-quotes # vendored from openconfig/gnmi v0.14.1, kept unmodified

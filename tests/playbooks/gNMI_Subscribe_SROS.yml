@@ -1,0 +1,52 @@
+---
+- name: Nokia SR OS Streaming Telemetry
+  hosts: nokia_srsim
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+
+  tasks:
+    - name: Sample port and interface statistics every second for 5 seconds
+      nokia.openconfig.gnmi_subscribe:
+        prefix: /state
+        path:
+          - /port[port-id=1/1/c1/1]/ethernet/statistics
+          - /router[router-name=Base]/interface/statistics
+        stream_mode: sample
+        sample_interval: 1s
+        duration: 5
+      register: telemetry
+
+    - name: Check that both paths were sampled
+      vars:
+        prefixes: "{{ telemetry.output | from_json | map(attribute='prefix') | list }}"
+      ansible.builtin.assert:
+        that:
+          - prefixes | select('search', '^/state/port\[port-id=1/1/c1/1\]/ethernet/statistics') | list | length > 0
+          - prefixes | select('search', '^/state/router\[router-name=Base\]/interface') | list | length > 0
+
+- name: Nokia SR OS Streaming Telemetry, one setting per path
+  hosts: nokia_srsim
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+
+  tasks:
+    - name: Sample port statistics and stream interface changes
+      nokia.openconfig.gnmi_subscribe:
+        duration: 5
+        prefix: /state
+        subscription:
+          - path: /port[port-id=1/1/c1/1]/ethernet/statistics
+            stream_mode: sample
+            sample_interval: 1s
+          - path: /router[router-name=Base]/interface[interface-name=system]/oper-state
+            stream_mode: on_change
+      register: telemetry
+
+    - name: Check that samples were received
+      ansible.builtin.assert:
+        that:
+          - telemetry.output | from_json | length > 0

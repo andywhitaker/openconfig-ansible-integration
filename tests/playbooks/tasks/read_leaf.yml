@@ -1,0 +1,15 @@
+---
+# Reads the configuration value at `leaf_path` into `leaf_value`
+# ('' if the leaf is not configured).
+
+- name: Read {{ leaf_path }}
+  nokia.openconfig.gnmi_get:
+    path:
+      - "{{ leaf_path }}"
+    type: config
+    values_only: true
+  register: leaf_read
+
+- name: Store the value
+  ansible.builtin.set_fact:
+    leaf_value: "{{ (leaf_read.output | from_json) | first | default('') }}"

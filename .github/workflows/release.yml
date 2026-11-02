@@ -7,16 +7,17 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Git tag to attach the artifact to (e.g., 1.0.0)"
+        description: "Git tag to attach the artifact to (e.g., 2.0.0-beta.1)"
         required: true
 
 permissions:
   contents: write
 
 jobs:
-  build-and-publish:
+  build:
     runs-on: ubuntu-latest
-    environment: release
+    outputs:
+      filename: ${{ steps.meta.outputs.filename }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -26,48 +27,101 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Install Ansible
-        run: pip install ansible-core
-
-      - name: Build and install this collection
+      - name: Install build requirements
         run: |
-          ansible-galaxy collection build .
+          pip install https://github.com/ansible/ansible/archive/stable-2.22.tar.gz
+          pip install -r requirements-dev.txt
+
+      - name: Build python wrappers for gRPC proto files
+        run: tools/build_protos.sh
+
+      - name: Build collection
+        run: ansible-galaxy collection build .
 
       - name: Extract collection metadata
         id: meta
         run: |
           FILENAME="$(yq -r '. | "\(.namespace)-\(.name)-\(.version).tar.gz"' galaxy.yml)"
-
           if [ ! -f "$FILENAME" ]; then
             echo "Collection artifact $FILENAME not found" >&2
             exit 1
           fi
+          echo "filename=$FILENAME" >> "$GITHUB_OUTPUT"
 
-          echo "FILENAME=$FILENAME" >> "$GITHUB_ENV"
+      - name: Smoke test (Python 3.13, ansible-core 2.22)
+        run: tools/smoke_test.sh "${{ steps.meta.outputs.filename }}"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openconfig-ansible-collection
-          path: ${{ env.FILENAME }}
+          name: nokia-openconfig-collection
+          path: ${{ steps.meta.outputs.filename }}
+
+  # The oldest grpcio and protobuf allowed by requirements.txt
+  smoke-oldest:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: '3.12'
+            ansible: '2.20'
+            runtime: grpcio==1.59.0 protobuf==3.20.3
+          - python: '3.14'
+            ansible: '2.21'
+            runtime: grpcio==1.75.1 protobuf==5.29.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install oldest supported runtime
+        run: |
+          pip install --only-binary=:all: 'ansible-core>=${{ matrix.ansible }},<${{ matrix.ansible }}.99' ${{ matrix.runtime }} 'PyYAML>=6.0'
+
+      - name: Download collection
+        uses: actions/download-artifact@v4
+        with:
+          name: nokia-openconfig-collection
+
+      - name: Smoke test (Python ${{ matrix.python }}, ansible-core ${{ matrix.ansible }}, ${{ matrix.runtime }})
+        run: tools/smoke_test.sh "${{ needs.build.outputs.filename }}"
+
+  publish:
+    needs: [build, smoke-oldest]
+    runs-on: ubuntu-latest
+    environment: release
+    env:
+      ANSIBLE_GALAXY_API_KEY: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
+    steps:
+      - name: Download collection
+        uses: actions/download-artifact@v4
+        with:
+          name: nokia-openconfig-collection
 
       - name: Attach collection to GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          files: ${{ env.FILENAME }}
+          files: ${{ needs.build.outputs.filename }}
+
+      - name: Install Ansible
+        if: env.ANSIBLE_GALAXY_API_KEY != ''
+        run: pip install ansible-core
 
       - name: Publish to Ansible Galaxy
         if: env.ANSIBLE_GALAXY_API_KEY != ''
-        env:
-          ANSIBLE_GALAXY_API_KEY: ${{ secrets.ANSIBLE_GALAXY_API_KEY }}
         run: |
           echo "Publishing collection to Ansible Galaxy..."
-          ansible-galaxy collection publish ${{ env.FILENAME }} --api-key "$ANSIBLE_GALAXY_API_KEY"
+          ansible-galaxy collection publish "${{ needs.build.outputs.filename }}" --api-key "$ANSIBLE_GALAXY_API_KEY"
 
       - name: Skip Publishing to Ansible Galaxy
         if: env.ANSIBLE_GALAXY_API_KEY == ''
         run: |
           echo "::warning::No ANSIBLE_GALAXY_API_KEY found. Skipping Galaxy publish."
           echo "To enable automatic publishing, add this secret in repository settings."
-...

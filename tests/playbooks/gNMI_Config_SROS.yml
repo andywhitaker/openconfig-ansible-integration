@@ -1,0 +1,95 @@
+---
+- name: Nokia SR OS Set/Get Configuration
+  hosts: nokia_srsim
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+
+  tasks:
+    - name: Read the current location and contact
+      nokia.openconfig.gnmi_get:
+        type: config
+        prefix: /configure
+        path:
+          - system/location
+          - system/contact
+      register: before
+
+    - name: Change configuration in one transaction
+      nokia.openconfig.gnmi_set:
+        prefix: /configure
+        update:
+          - path: system/location
+            value: Australia
+          - path: system/contact
+            value: NOKIA
+        replace:
+          - path: service/md-auto-id
+            value:
+              service-id-range:
+                start: 10000
+                end: 99999
+              customer-id-range:
+                start: 10000
+                end: 10999
+        delete:
+          - system/cron
+      register: change
+      diff: true
+
+    - name: Check the SetResponse
+      ansible.builtin.assert:
+        that:
+          - change is changed
+          - (change.output | from_json).response | map(attribute='op') | sort == ['DELETE', 'REPLACE', 'UPDATE', 'UPDATE']
+
+    - name: Read the changed configuration
+      nokia.openconfig.gnmi_get:
+        type: config
+        prefix: /configure
+        path:
+          - system/location
+          - system/contact
+          - service/md-auto-id
+      register: after
+
+    - name: Check the change
+      vars:
+        config: "{{ (after.output | from_json).configure }}"
+      ansible.builtin.assert:
+        that:
+          - config.system.location == 'Australia'
+          - config.system.contact == 'NOKIA'
+          - config.service['md-auto-id']['service-id-range'].start | int == 10000
+
+    - name: Apply the same update again
+      nokia.openconfig.gnmi_set:
+        prefix: /configure
+        update:
+          - path: system/location
+            value: Australia
+          - path: system/contact
+            value: NOKIA
+      register: again
+
+    - name: Check idempotency
+      ansible.builtin.assert:
+        that:
+          - again is not changed
+
+    - name: Revert the demo changes
+      nokia.openconfig.gnmi_set:
+        prefix: /configure
+        update:
+          - path: system/contact
+            value: nokia
+        delete: "{{ ['service/md-auto-id'] + ([] if (before.output | from_json).configure.system.location is defined else ['system/location']) }}"
+
+    - name: Restore the original location
+      nokia.openconfig.gnmi_set:
+        prefix: /configure
+        update:
+          - path: system/location
+            value: "{{ (before.output | from_json).configure.system.location }}"
+      when: (before.output | from_json).configure.system.location is defined

@@ -1,0 +1,86 @@
+---
+- name: Nokia SRL Set/Get Configuration
+  hosts: nokia_srlinux
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+    demo_interfaces:
+      - ethernet-1/6
+      - ethernet-1/7
+    # SR Linux qualifies top-level JSON_IETF members with the YANG module name
+    interface_key: srl_nokia-interfaces:interface
+
+  tasks:
+    - name: Enable two interfaces
+      nokia.openconfig.gnmi_set:
+        update:
+          - path: /interface[name=ethernet-1/6]
+            value:
+              admin-state: enable
+              description: ansible demo
+          - path: /interface[name=ethernet-1/7]
+            value:
+              admin-state: enable
+              description: ansible demo
+      register: change
+
+    - name: Check that the change was detected
+      ansible.builtin.assert:
+        that:
+          - change is changed
+          - (change.output | from_json).response | map(attribute='op') | list == ['UPDATE', 'UPDATE']
+
+    - name: Read the interfaces
+      nokia.openconfig.gnmi_get:
+        type: config
+        path:
+          - /interface[name=*]
+      register: interfaces
+
+    - name: Check the interfaces
+      vars:
+        demo: "{{ (interfaces.output | from_json)[interface_key] | selectattr('name', 'in', demo_interfaces) | list }}"
+      ansible.builtin.assert:
+        that:
+          - demo | length == 2
+          - demo | map(attribute='admin-state') | unique == ['enable']
+          - demo | map(attribute='description') | unique == ['ansible demo']
+
+    - name: Apply the same change again
+      nokia.openconfig.gnmi_set:
+        update:
+          - path: /interface[name=ethernet-1/6]
+            value:
+              admin-state: enable
+              description: ansible demo
+          - path: /interface[name=ethernet-1/7]
+            value:
+              admin-state: enable
+              description: ansible demo
+      register: again
+
+    - name: Check idempotency
+      ansible.builtin.assert:
+        that:
+          - again is not changed
+
+    - name: Remove the demo interfaces
+      nokia.openconfig.gnmi_set:
+        delete:
+          - /interface[name=ethernet-1/6]
+          - /interface[name=ethernet-1/7]
+      register: cleanup
+
+    - name: Read the interfaces again
+      nokia.openconfig.gnmi_get:
+        type: config
+        path:
+          - /interface[name=*]
+      register: interfaces
+
+    - name: Check the interfaces were removed
+      ansible.builtin.assert:
+        that:
+          - cleanup is changed
+          - (interfaces.output | from_json)[interface_key] | selectattr('name', 'in', demo_interfaces) | list | length == 0

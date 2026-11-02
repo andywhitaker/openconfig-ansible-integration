@@ -1,0 +1,130 @@
+---
+- name: gNMI Commit extension (confirmed commit)
+  hosts: all
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+    leaf_path: "{{ commit_path }}"
+
+  tasks:
+    - name: Remember the original value
+      ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+    - name: Store the original value
+      ansible.builtin.set_fact:
+        original_value: "{{ leaf_value }}"
+
+    - name: Confirmed commit
+      block:
+        # 1. Start a confirmed commit with a short rollback timer
+        - name: Start confirmed commit A (rollback after 15s)
+          nokia.openconfig.gnmi_set:
+            update:
+              - path: "{{ commit_path }}"
+                value: cc-a
+            commit_id: ansible-cc-a
+            commit_request: true
+            rollback_duration: 15s
+          register: commit_a
+
+        - name: Read the value
+          ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+        - name: Check commit A is applied
+          ansible.builtin.assert:
+            that:
+              - leaf_value == 'cc-a'
+              - commit_a is changed
+
+        # 5. Extend the rollback timer of the commit in progress
+        - name: Extend the rollback timer of commit A to 60s
+          nokia.openconfig.gnmi_set:
+            commit_id: ansible-cc-a
+            rollback_duration: 60s
+
+        - name: Wait past the original 15s timer
+          ansible.builtin.pause:
+            seconds: 20
+
+        - name: Read the value
+          ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+        - name: Check commit A survived the original timer
+          ansible.builtin.assert:
+            that:
+              - leaf_value == 'cc-a'
+
+        # 3. Confirm without update, replace or delete
+        - name: Confirm commit A
+          nokia.openconfig.gnmi_set:
+            commit_id: ansible-cc-a
+            commit_confirm: true
+
+        - name: Read the value
+          ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+        - name: Check commit A persists
+          ansible.builtin.assert:
+            that:
+              - leaf_value == 'cc-a'
+
+        # 2. Do not confirm: the device must roll back. A server that
+        #    ignores the extension keeps cc-b, so this check catches it.
+        - name: Start confirmed commit B (rollback after 10s)
+          nokia.openconfig.gnmi_set:
+            update:
+              - path: "{{ commit_path }}"
+                value: cc-b
+            commit_id: ansible-cc-b
+            commit_request: true
+            rollback_duration: 10s
+
+        - name: Read the value
+          ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+        - name: Check commit B is applied
+          ansible.builtin.assert:
+            that:
+              - leaf_value == 'cc-b'
+
+        - name: Wait for the rollback
+          ansible.builtin.pause:
+            seconds: 15
+
+        - name: Read the value
+          ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+        - name: Check commit B was rolled back
+          ansible.builtin.assert:
+            that:
+              - leaf_value == 'cc-a'
+
+        # 4. Cancel
+        - name: Start confirmed commit C
+          nokia.openconfig.gnmi_set:
+            update:
+              - path: "{{ commit_path }}"
+                value: cc-c
+            commit_id: ansible-cc-c
+            commit_request: true
+            rollback_duration: 60s
+
+        - name: Cancel commit C
+          nokia.openconfig.gnmi_set:
+            commit_id: ansible-cc-c
+            commit_cancel: true
+
+        - name: Read the value
+          ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+        - name: Check commit C was reverted
+          ansible.builtin.assert:
+            that:
+              - leaf_value == 'cc-a'
+
+      always:
+        - name: Restore the original value
+          nokia.openconfig.gnmi_set:
+            update: "{{ [{'path': commit_path, 'value': original_value}] if original_value != '' else omit }}"
+            delete: "{{ [commit_path] if original_value == '' else omit }}"

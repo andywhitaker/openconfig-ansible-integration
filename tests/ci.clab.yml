@@ -1,4 +1,4 @@
-# Copyright 2025 Nokia
+# Copyright 2025-2026 Nokia
 # Licensed under the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 
@@ -7,7 +7,7 @@ name: ansible
 topology:
   kinds:
     nokia_srlinux:
-      image: ghcr.io/nokia/srlinux:${SROS_VERSION:=25.7.2}
+      image: ghcr.io/nokia/srlinux:${SRL_VERSION:=25.7.2}
 
   nodes:
     srl:
@@ -16,6 +16,8 @@ topology:
       mgmt-ipv4: 172.20.20.111
       startup-config: |
         set / system information contact "nokia"
+        set / system lldp admin-state enable
+        set / system management openconfig admin-state enable
 
         set / interface system0 admin-state enable
         set / interface system0 subinterface 0

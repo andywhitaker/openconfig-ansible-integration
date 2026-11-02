@@ -1,0 +1,65 @@
+---
+- name: gNMI Depth extension
+  hosts: all
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+    # Children of the returned node that are containers or list entries
+    # with content, i.e. the node has grandchildren.
+    grandchildren_query: >-
+      {%- set children = values | select('mapping') | map('dict2items') | flatten(1) | map(attribute='value') | list -%}
+      {%- set nested = (children | select('mapping') | list)
+          + (children | reject('string') | reject('mapping') | select('iterable') | flatten(1) | select('mapping') | list) -%}
+      {{ nested | map('dict2items') | flatten(1) | map(attribute='value') | reject('string') | select('iterable') | list | length }}
+
+  tasks:
+    - name: Get the full subtree
+      nokia.openconfig.gnmi_get:
+        path:
+          - "{{ depth_path }}"
+        type: config
+        values_only: true
+      register: full
+
+    - name: Get the subtree with depth 1
+      nokia.openconfig.gnmi_get:
+        path:
+          - "{{ depth_path }}"
+        type: config
+        depth: 1
+        values_only: true
+      register: shallow
+
+    - name: Count grandchildren in the full subtree
+      ansible.builtin.set_fact:
+        full_grandchildren: "{{ grandchildren_query | int }}"
+      vars:
+        values: "{{ full.output | from_json }}"
+
+    - name: Count grandchildren with depth 1
+      ansible.builtin.set_fact:
+        shallow_grandchildren: "{{ grandchildren_query | int }}"
+      vars:
+        values: "{{ shallow.output | from_json }}"
+
+    # A server that ignores the extension returns the full subtree again
+    - name: Check that depth 1 returns no grandchildren
+      ansible.builtin.assert:
+        that:
+          - full_grandchildren | int > 0
+          - shallow_grandchildren | int == 0
+        fail_msg: "full subtree: {{ full_grandchildren }} grandchildren, depth 1: {{ shallow_grandchildren }}"
+
+    - name: Subscribe ONCE with depth 1
+      nokia.openconfig.gnmi_subscribe:
+        path:
+          - "{{ depth_path }}"
+        mode: once
+        depth: 1
+      register: once
+
+    - name: Check the subscription returned data
+      ansible.builtin.assert:
+        that:
+          - once.output | from_json | length > 0

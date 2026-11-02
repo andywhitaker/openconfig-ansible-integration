@@ -1,0 +1,21 @@
+---
+- name: OpenConfig Get Configuration
+  hosts: all
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+
+  tasks:
+    - name: Get OpenConfig interfaces
+      nokia.openconfig.gnmi_get:
+        type: config
+        path:
+          - /oc:interfaces/interface[name=*]
+      register: interfaces
+
+    - name: Check that interfaces were returned
+      ansible.builtin.assert:
+        that:
+          - interfaces.output | from_json | length > 0
+          - interfaces.output is search('"interface"')

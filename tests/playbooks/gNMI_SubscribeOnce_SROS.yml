@@ -1,0 +1,21 @@
+---
+- name: Nokia SR OS Stream Large Configuration
+  hosts: nokia_srsim
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+
+  tasks:
+    - name: Get /configure using Subscribe ONCE
+      nokia.openconfig.gnmi_subscribe:
+        mode: once
+        path:
+          - /configure
+      register: once
+
+    - name: Check the configuration tree
+      ansible.builtin.assert:
+        that:
+          - (once.output | from_json).configure is mapping
+          - (once.output | from_json).configure.system.contact == 'nokia'

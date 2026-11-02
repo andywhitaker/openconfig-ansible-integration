@@ -1,0 +1,28 @@
+---
+- name: Nokia SRL Streaming Telemetry
+  hosts: nokia_srlinux
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+
+  tasks:
+    - name: Sample interface statistics every second for 5 seconds
+      nokia.openconfig.gnmi_subscribe:
+        path:
+          - /interface[name=*]/statistics
+        stream_mode: sample
+        sample_interval: 1s
+        duration: 5
+      register: telemetry
+
+    # SR Linux sends no notification prefix; update paths start with the
+    # module-qualified element (srl_nokia-interfaces:interface[name=...]).
+    - name: Check that samples were received
+      vars:
+        samples: "{{ telemetry.output | from_json }}"
+        sample_paths: "{{ samples | selectattr('values', 'defined') | map(attribute='values') | map('list') | flatten }}"
+      ansible.builtin.assert:
+        that:
+          - samples | length > 1
+          - sample_paths | select('search', '(^|:)interface\[name=ethernet-1/1\]/statistics$') | list | length > 0
