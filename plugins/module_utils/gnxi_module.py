@@ -61,7 +61,7 @@ def run(module, method, service, rpc, read_only, fields=None, encode=None, trans
     for param, name in (transport or {}).items():
         value = module.params.get(param)
         if value is not None:
-            if param == 'local_path':
+            if param == 'local_path' and not os.path.isabs(value):
                 # the persistent connection process has a different working directory
                 value = os.path.abspath(value)
             kwargs[name] = value

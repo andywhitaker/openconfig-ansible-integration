@@ -134,6 +134,13 @@ def test_relative_local_paths_are_made_absolute(connection, run_module, tmp_path
     assert connection.calls[1][1]['save_to'] == str(tmp_path / 'out.cfg')
 
 
+def test_absolute_local_paths_are_passed_unchanged(connection, run_module, tmp_path):
+    connection.responses['invokeGnoi'] = {'output': {}}
+    local_path = '%s/sub/../out.cfg' % tmp_path
+    run_module(load('gnoi_file_get').main, {'remote_path': 'cf3:/config.cfg', 'local_path': local_path})
+    assert connection.calls[0][1]['save_to'] == local_path
+
+
 def test_file_stat_and_remove_use_request_fields(connection, run_module):
     connection.responses['invokeGnoi'] = {'output': {}}
     run_module(load('gnoi_file_stat').main, {'remote_path': 'cf3:/'})
