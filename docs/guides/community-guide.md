@@ -15,6 +15,6 @@ Follow the [Ansible Community Guidelines](https://docs.ansible.com/ansible/devel
 
 ## Releases
 
-Tagged releases are published to [Ansible Galaxy](https://galaxy.ansible.com/ui/repo/published/nokia/openconfig/) and attached to the [GitHub release](https://github.com/nokia-steward/openconfig-ansible-integration/releases). The documentation describes the 2.0.0 release line. Pre-release versions, such as `2.0.0-beta.5`, are only installed when requested explicitly, see [Installation](../getting-started/installation.md).
+Tagged releases are published to [Ansible Galaxy](https://galaxy.ansible.com/ui/repo/published/nokia/openconfig/) and attached to the [GitHub release](https://github.com/nokia-steward/openconfig-ansible-integration/releases). The documentation describes the 2.0.0 release line. Pre-release versions, such as `2.0.0`, are only installed when requested explicitly, see [Installation](../getting-started/installation.md).
 
 Thank you for improving OpenConfig automation for the community.
