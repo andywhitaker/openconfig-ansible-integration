@@ -39,7 +39,11 @@ EOF
 
 export ANSIBLE_COLLECTIONS_PATH="$DEST"
 ansible-doc -t connection nokia.openconfig.grpc > /dev/null
-for m in gnmi_capabilities gnmi_get gnmi_set gnmi_subscribe; do
-  ansible-doc "nokia.openconfig.$m" > /dev/null
+modules=()
+for f in "$DEST/ansible_collections/nokia/openconfig/plugins/modules/"*.py; do
+  base="$(basename "$f" .py)"
+  [[ "$base" == __* ]] && continue
+  modules+=("nokia.openconfig.$base")
 done
-echo "ansible-doc loads the connection plugin and all modules"
+ansible-doc -t module "${modules[@]}" > /dev/null
+echo "ansible-doc loads the connection plugin and all ${#modules[@]} modules"

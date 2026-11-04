@@ -55,14 +55,18 @@ jobs:
 
       - name: Build python wrappers for gRPC proto files
         working-directory: ${{ env.COLLECTION_PATH }}
-        run: tools/build_protos.sh
+        run: tools/build_openconfig_protos.sh
+
+      - name: Clean ansible-test artifacts before sanity
+        working-directory: ${{ env.COLLECTION_PATH }}
+        run: rm -rf tests/output site
 
       - name: Sanity tests
         working-directory: ${{ env.COLLECTION_PATH }}
-        run: ansible-test sanity --docker default -v --color
+        run: ansible-test sanity --venv --python ${{ matrix.python }} -v --color
 
-      # Units run in place (--venv): the generated *_pb2.py files are
-      # gitignored and would not be part of a --docker payload.
+      # Units also use --venv: gitignored *_pb2.py files are on disk after the
+      # build step above but are omitted from the default Docker sanity payload.
       - name: Unit tests
         working-directory: ${{ env.COLLECTION_PATH }}
         run: ansible-test units --venv --python ${{ matrix.python }} -v --color
@@ -103,7 +107,7 @@ jobs:
       # Test the built artifact, as it would be installed from Galaxy
       - name: Build and install the collection
         run: |
-          tools/build_protos.sh
+          tools/build_openconfig_protos.sh
           ansible-galaxy collection build . --output-path "$RUNNER_TEMP/dist"
           ansible-galaxy collection install --force -p "$RUNNER_TEMP/collections" "$RUNNER_TEMP"/dist/nokia-openconfig-*.tar.gz
           echo "ANSIBLE_COLLECTIONS_PATH=$RUNNER_TEMP/collections" >> "$GITHUB_ENV"

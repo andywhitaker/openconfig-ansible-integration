@@ -5,43 +5,45 @@
 
   vars:
     ansible_connection: nokia.openconfig.grpc
-    leaf_path: /oc:system/config/motd-banner
-    demo_banner: Managed by Ansible (nokia.openconfig)
+    leaf_path: "{{ oc_lldp_enabled_path }}"
+    demo_enabled: true
+  vars_files:
+    - vars/model_oc.yml
 
   tasks:
-    - name: Remember the original banner
+    - name: Remember the original LLDP enabled state
       ansible.builtin.include_tasks: tasks/read_leaf.yml
 
-    - name: Store the original banner
+    - name: Store the original value
       ansible.builtin.set_fact:
-        original_banner: "{{ leaf_value }}"
+        original_enabled: "{{ leaf_value }}"
 
-    - name: Set the message of the day
+    - name: Enable LLDP (OpenConfig)
       nokia.openconfig.gnmi_set:
         update:
           - path: "{{ leaf_path }}"
-            value: "{{ demo_banner }}"
+            value: "{{ demo_enabled }}"
       register: change
 
     - name: Check that the change was detected
       ansible.builtin.assert:
         that:
-          - change is changed or original_banner == demo_banner
+          - change is changed or (original_enabled != '' and original_enabled | bool == demo_enabled)
           - (change.output | from_json).response | map(attribute='op') | list == ['UPDATE']
 
-    - name: Read the banner
+    - name: Read LLDP enabled
       ansible.builtin.include_tasks: tasks/read_leaf.yml
 
-    - name: Check the banner
+    - name: Check LLDP is enabled
       ansible.builtin.assert:
         that:
-          - leaf_value == demo_banner
+          - leaf_value | bool == demo_enabled
 
     - name: Apply the same change again
       nokia.openconfig.gnmi_set:
         update:
           - path: "{{ leaf_path }}"
-            value: "{{ demo_banner }}"
+            value: "{{ demo_enabled }}"
       register: again
 
     - name: Check idempotency
@@ -49,24 +51,23 @@
         that:
           - again is not changed
 
-    - name: Remove the banner
-      nokia.openconfig.gnmi_set:
-        delete:
-          - "{{ leaf_path }}"
-      register: cleanup
-
-    - name: Read the banner again
-      ansible.builtin.include_tasks: tasks/read_leaf.yml
-
-    - name: Check the banner was removed
-      ansible.builtin.assert:
-        that:
-          - cleanup is changed
-          - leaf_value == ''
-
-    - name: Restore the original banner
+    - name: Disable LLDP
       nokia.openconfig.gnmi_set:
         update:
           - path: "{{ leaf_path }}"
-            value: "{{ original_banner }}"
-      when: original_banner | length > 0
+            value: false
+      register: cleanup
+
+    - name: Read LLDP enabled again
+      ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+    - name: Check LLDP was disabled
+      ansible.builtin.assert:
+        that:
+          - cleanup is changed
+          - leaf_value | bool == false
+
+    - name: Restore the original LLDP enabled state
+      nokia.openconfig.gnmi_set:
+        update: "{{ [{'path': leaf_path, 'value': original_enabled | bool}] if original_enabled != '' else omit }}"
+        delete: "{{ [leaf_path] if original_enabled == '' else omit }}"

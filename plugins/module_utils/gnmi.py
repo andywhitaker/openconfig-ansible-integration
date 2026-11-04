@@ -56,7 +56,7 @@ def parse_duration(value):
     """
     Converts a duration into nanoseconds.
 
-    Accepts Go duration strings as used by gNMIc (30s, 1m30s, 1h, 500ms),
+    Accepts Go duration strings (30s, 1m30s, 1h, 500ms),
     as well as plain numbers, which are interpreted as seconds.
     """
     if value is None:
@@ -169,7 +169,7 @@ def encode_path(xpath, target=None):
     """
     Encodes an XPATH-like string into the dict form of gnmi.Path.
 
-    The origin is given gNMIc style as "origin:/path". For compatibility
+    The origin is given as "origin:/path". For compatibility
     with 1.0.0 a module prefix on any element name ("/oc:interfaces") also
     sets the origin.
     """
@@ -208,7 +208,7 @@ def decode_path(path):
     Decodes the dict form of gnmi.Path into a string.
 
     Paths without origin are returned without leading slash, as in 1.0.0.
-    Paths with origin use the gNMIc form "origin:/path".
+    Paths with origin use the form "origin:/path".
     """
     if not path:
         return ''
@@ -347,7 +347,7 @@ def build_set_request(prefix=None, target=None, update=None, replace=None, delet
 
 def load_set_request(data):
     """
-    Normalizes a gNMIc set-request document (already parsed from JSON/YAML).
+    Normalizes a set-request file document (already parsed from JSON/YAML).
 
     Returns a dict with update, replace and delete lists in module form.
     """
@@ -528,7 +528,7 @@ def merge_notifications(raw):
 
 
 def notification_values(raw):
-    """Returns only the decoded values, like gNMIc --values-only."""
+    """Returns only the decoded values of the notifications."""
     values = []
     for notification in _notifications(raw):
         for upd in notification.get('update', []):

@@ -1,0 +1,9 @@
+---
+# OpenConfig paths for the _OC playbooks (vars_files: vars/model_oc.yml).
+# SR OS returns OpenConfig configuration only for what was configured through
+# OpenConfig, so the Set example and config Get use LLDP, which both
+# platforms accept.
+oc_lldp_path: /oc:lldp
+oc_lldp_config_path: /oc:lldp/config
+oc_lldp_enabled_path: /oc:lldp/config/enabled
+oc_counters_path: /oc:interfaces/interface[name=*]/state/counters

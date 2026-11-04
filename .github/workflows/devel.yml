@@ -40,11 +40,15 @@ jobs:
 
       - name: Build python wrappers for gRPC proto files
         working-directory: ${{ env.COLLECTION_PATH }}
-        run: tools/build_protos.sh
+        run: tools/build_openconfig_protos.sh
+
+      - name: Clean ansible-test artifacts before sanity
+        working-directory: ${{ env.COLLECTION_PATH }}
+        run: rm -rf tests/output site
 
       - name: Sanity tests
         working-directory: ${{ env.COLLECTION_PATH }}
-        run: ansible-test sanity --docker default -v --color
+        run: ansible-test sanity --venv --python 3.13 -v --color
 
       - name: Unit tests
         working-directory: ${{ env.COLLECTION_PATH }}

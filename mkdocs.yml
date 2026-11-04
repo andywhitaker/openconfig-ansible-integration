@@ -1,0 +1,132 @@
+site_name: Nokia OpenConfig Ansible Collection
+site_description: Ansible modules and connection plugin for OpenConfig gNMI, gNOI,
+  and gNSI
+site_url: https://nokia-steward.github.io/openconfig-ansible-integration/
+edit_uri: edit/main/docs/
+site_author: Sven Wisotzky
+repo_name: nokia-steward/openconfig-ansible-integration
+repo_url: https://github.com/nokia-steward/openconfig-ansible-integration
+copyright: Copyright &copy; 2026 Nokia
+theme:
+  name: material
+  palette:
+  - media: '(prefers-color-scheme: light)'
+    scheme: default
+    toggle:
+      icon: material/toggle-switch-off-outline
+      name: Switch to dark mode
+  - media: '(prefers-color-scheme: dark)'
+    scheme: slate
+    toggle:
+      icon: material/toggle-switch
+      name: Switch to light mode
+  logo: media/logo.png
+  include_search_page: false
+  search_index_only: true
+  language: en
+  features:
+  - navigation.instant
+  - navigation.tracking
+  - navigation.tabs
+  - navigation.top
+  - search.suggest
+  - search.highlight
+  - content.code.copy
+  - content.code.select
+  - navigation.sections
+  - content.code.annotate
+  - content.action.edit
+  - toc.follow
+  - content.tooltips
+  - navigation.indexes
+  font:
+    text: Roboto
+    code: Fira Code
+nav:
+- Home: index.md
+- Getting Started:
+  - Installation: getting-started/installation.md
+  - Quick Start: getting-started/quick-start.md
+- Guides:
+  - Overview: guides/index.md
+  - User Guide: guides/user-guide.md
+  - Security Guide: guides/security-guide.md
+  - Developer Guide: guides/developer-guide.md
+  - Community Guide: guides/community-guide.md
+- Examples: examples.md
+- Support: support.md
+- Reference:
+  - Overview: reference/index.md
+  - Modules:
+    - gNMI:
+      - Capabilities: reference/nokia.openconfig.gnmi_capabilities.md
+      - Get: reference/nokia.openconfig.gnmi_get.md
+      - Set: reference/nokia.openconfig.gnmi_set.md
+      - Subscribe: reference/nokia.openconfig.gnmi_subscribe.md
+    - gNOI:
+      - BGP Clear BGP Neighbor: reference/nokia.openconfig.gnoi_bgp_clear_bgp_neighbor.md
+      - Factory Reset Start: reference/nokia.openconfig.gnoi_factory_reset_start.md
+      - File Get: reference/nokia.openconfig.gnoi_file_get.md
+      - File Put: reference/nokia.openconfig.gnoi_file_put.md
+      - File Remove: reference/nokia.openconfig.gnoi_file_remove.md
+      - File Stat: reference/nokia.openconfig.gnoi_file_stat.md
+      - File Transfer To Remote: reference/nokia.openconfig.gnoi_file_transfer_to_remote.md
+      - Healthz Acknowledge: reference/nokia.openconfig.gnoi_healthz_acknowledge.md
+      - Healthz Artifact: reference/nokia.openconfig.gnoi_healthz_artifact.md
+      - Healthz Check: reference/nokia.openconfig.gnoi_healthz_check.md
+      - Healthz Get: reference/nokia.openconfig.gnoi_healthz_get.md
+      - Healthz List: reference/nokia.openconfig.gnoi_healthz_list.md
+      - OS Activate: reference/nokia.openconfig.gnoi_os_activate.md
+      - OS Install: reference/nokia.openconfig.gnoi_os_install.md
+      - OS Verify: reference/nokia.openconfig.gnoi_os_verify.md
+      - System Cancel Reboot: reference/nokia.openconfig.gnoi_system_cancel_reboot.md
+      - System Kill Process: reference/nokia.openconfig.gnoi_system_kill_process.md
+      - System Ping: reference/nokia.openconfig.gnoi_system_ping.md
+      - System Reboot: reference/nokia.openconfig.gnoi_system_reboot.md
+      - System Reboot Status: reference/nokia.openconfig.gnoi_system_reboot_status.md
+      - System Set Package: reference/nokia.openconfig.gnoi_system_set_package.md
+      - System Switch Control Processor: reference/nokia.openconfig.gnoi_system_switch_control_processor.md
+      - System Time: reference/nokia.openconfig.gnoi_system_time.md
+      - System Traceroute: reference/nokia.openconfig.gnoi_system_traceroute.md
+    - gNSI:
+      - Authz Get: reference/nokia.openconfig.gnsi_authz_get.md
+      - Authz Probe: reference/nokia.openconfig.gnsi_authz_probe.md
+      - Authz Rotate: reference/nokia.openconfig.gnsi_authz_rotate.md
+      - Certz Add Profile: reference/nokia.openconfig.gnsi_certz_add_profile.md
+      - Certz Can Generate CSR: reference/nokia.openconfig.gnsi_certz_can_generate_csr.md
+      - Certz Delete Profile: reference/nokia.openconfig.gnsi_certz_delete_profile.md
+      - Certz Get Profile List: reference/nokia.openconfig.gnsi_certz_get_profile_list.md
+      - Certz Rotate: reference/nokia.openconfig.gnsi_certz_rotate.md
+      - Credentialz Can Generate Key: reference/nokia.openconfig.gnsi_credentialz_can_generate_key.md
+      - Credentialz Get Public Keys: reference/nokia.openconfig.gnsi_credentialz_get_public_keys.md
+      - Credentialz Rotate Account Credentials: reference/nokia.openconfig.gnsi_credentialz_rotate_account_credentials.md
+      - Credentialz Rotate Host Parameters: reference/nokia.openconfig.gnsi_credentialz_rotate_host_parameters.md
+      - Pathz Get: reference/nokia.openconfig.gnsi_pathz_get.md
+      - Pathz Probe: reference/nokia.openconfig.gnsi_pathz_probe.md
+      - Pathz Rotate: reference/nokia.openconfig.gnsi_pathz_rotate.md
+  - Plugins:
+    - GRPC: reference/nokia.openconfig.grpc.md
+plugins:
+- search
+markdown_extensions:
+- attr_list
+- toc:
+    permalink: true
+- tables
+- admonition
+- pymdownx.details
+- pymdownx.superfences
+- pymdownx.highlight:
+    use_pygments: true
+- pymdownx.tabbed:
+    alternate_style: true
+- pymdownx.blocks.tab:
+    alternate_style: true
+- pymdownx.blocks.admonition
+- pymdownx.tasklist:
+    custom_checkbox: true
+extra:
+  version: 2.0.0
+  social:
+  - icon: fontawesome/brands/github
+    link: https://github.com/nokia-steward/openconfig-ansible-integration

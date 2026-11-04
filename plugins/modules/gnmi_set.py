@@ -16,12 +16,12 @@ author:
   - "Sven Wisotzky (@wisotzky)"
 short_description: Modify configuration using a single gNMI Set
 description:
-  - Sends a single gNMI C(SetRequest), like C(gnmic set). Deletes are applied
-    first, then replaces, then updates, as a single transaction.
-  - Option names follow the gNMIc flags in snake_case, and the values follow
-    the gNMI 0.10.0 protobuf messages.
-  - Confirmed commit uses the gNMI Commit extension, with the same options and
-    rules as gNMIc. There is no separate commit module.
+  - Sends a single gNMI C(SetRequest). Deletes are applied first, then
+    replaces, then updates, as a single transaction.
+  - Option names are the C(SetRequest) fields in snake_case, and the values
+    follow the gNMI 0.10.0 protobuf messages.
+  - Confirmed commit uses the gNMI Commit extension. There is no separate
+    commit module.
   - To report C(changed), the module reads the affected paths (or the full
     configuration if O(backup=true)) with gNMI Get before and after the Set.
   - This module was called C(nokia.openconfig.gnmi_config) in 1.0.0.
@@ -29,22 +29,22 @@ version_added: 1.0.0
 options:
   prefix:
     description:
-      - Common prefix for all paths, gNMIc C(--prefix) and C(SetRequest.prefix).
+      - Common prefix for all paths, C(SetRequest.prefix).
     type: str
   target:
     description:
-      - Target name set on the prefix, gNMIc C(--target) and C(Path.target).
+      - Target name set on the prefix, C(Path.target).
     type: str
     version_added: 2.0.0
   update:
     description:
-      - Paths and values to merge, gNMIc C(--update) and C(SetRequest.update).
+      - Paths and values to merge, C(SetRequest.update).
     type: list
     elements: dict
     suboptions:
       path:
         description:
-          - Path to update. The origin is given gNMIc style, for example
+          - Path to update. The origin is given as prefix, for example
             C(openconfig:/system/config).
         type: str
         required: true
@@ -56,7 +56,7 @@ options:
         required: true
       encoding:
         description:
-          - Encoding of this value, gNMIc C(--encoding). Defaults to the
+          - Encoding of this value, C(TypedValue). Defaults to the
             encoding of the connection.
           - One of C(JSON), C(JSON_IETF), C(ASCII), C(STRING), C(INT), C(UINT),
             C(BOOL), C(FLOAT), C(BYTES).
@@ -64,8 +64,7 @@ options:
         version_added: 2.0.0
   replace:
     description:
-      - Paths and values to replace, gNMIc C(--replace) and
-        C(SetRequest.replace).
+      - Paths and values to replace, C(SetRequest.replace).
     type: list
     elements: dict
     suboptions:
@@ -87,15 +86,15 @@ options:
         version_added: 2.0.0
   delete:
     description:
-      - Paths to delete, gNMIc C(--delete) and C(SetRequest.delete).
+      - Paths to delete, C(SetRequest.delete).
     type: list
     elements: str
   request_file:
     description:
-      - JSON or YAML file in the gNMIc set-request format, gNMIc
-        C(--request-file). Top-level keys are C(updates), C(replaces) and
-        C(deletes). Each update and replace has C(path), C(value) and
-        optionally C(encoding).
+      - JSON or YAML file with the request. Top-level keys are C(updates),
+        C(replaces) and C(deletes). Each update and replace has C(path),
+        C(value) and optionally C(encoding). This is the request file format
+        of common gNMI clients.
       - Go templates are not supported. Use M(ansible.builtin.template) to
         render the file first.
       - Relative paths are searched like M(ansible.builtin.copy) sources.
@@ -104,20 +103,23 @@ options:
     version_added: 2.0.0
   encoding:
     description:
-      - Default encoding of the values in this request, gNMIc C(--encoding).
-        Defaults to the encoding of the connection.
+      - Default encoding of the values in this request. Defaults to the
+        encoding of the connection.
+      - With C(JSON_IETF), SR OS expects member names qualified with the YANG
+        module in container values, for example C(nokia-conf:location).
+        Use C(JSON) to send plain member names.
     type: str
     version_added: 2.0.0
   commit_id:
     description:
-      - ID of the confirmed commit, gNMIc C(--commit-id) and C(Commit.id).
+      - ID of the confirmed commit, C(Commit.id).
       - Required with O(commit_request), O(commit_confirm), O(commit_cancel)
         or O(rollback_duration).
     type: str
     version_added: 2.0.0
   commit_request:
     description:
-      - Starts a confirmed commit with this Set, gNMIc C(--commit-request).
+      - Starts a confirmed commit with this Set, C(Commit.commit).
       - The device rolls back the change unless it is confirmed within
         O(rollback_duration).
     type: bool
@@ -125,7 +127,7 @@ options:
     version_added: 2.0.0
   commit_confirm:
     description:
-      - Confirms the confirmed commit O(commit_id), gNMIc C(--commit-confirm).
+      - Confirms the confirmed commit O(commit_id), C(Commit.confirm).
       - Usually sent without O(update), O(replace) and O(delete).
     type: bool
     default: false
@@ -133,14 +135,13 @@ options:
   commit_cancel:
     description:
       - Cancels the confirmed commit O(commit_id) and rolls back its changes,
-        gNMIc C(--commit-cancel).
+        C(Commit.cancel).
     type: bool
     default: false
     version_added: 2.0.0
   rollback_duration:
     description:
-      - Rollback timer as Go duration, for example C(30s) or C(1m30s), gNMIc
-        C(--rollback-duration).
+      - Rollback timer as Go duration, for example C(30s) or C(1m30s).
       - With O(commit_request) it sets C(CommitRequest.rollback_duration).
         Alone, it changes the timer of the confirmed commit in progress
         (C(Commit.set_rollback_duration)).
@@ -149,7 +150,7 @@ options:
   dry_run:
     description:
       - Build the C(SetRequest) and return it as RV(request) without
-        sending it, gNMIc C(--dry-run). Check mode does the same.
+        sending it. Check mode does the same.
     type: bool
     default: false
     version_added: 2.0.0
@@ -179,7 +180,8 @@ options:
 notes:
   - Requires the P(nokia.openconfig.grpc#connection) connection.
   - In check mode and with O(dry_run=true) the request is built and returned
-    but not sent, and C(changed) is always false.
+    but not sent, and C(changed) is always false. No backup file is written
+    and no gNMI Get for O(backup) runs in check mode.
   - Commit operations without O(update), O(replace) or O(delete) (confirm,
     cancel, new rollback duration) always report C(changed).
 requirements:
@@ -188,34 +190,47 @@ requirements:
 """
 
 EXAMPLES = """
-# gnmic set --prefix /configure --update-path system/location --update-value Melbourne ...
-- name: Update, replace and delete in one transaction
+# SR OS expects qualified member names in JSON_IETF container values;
+# JSON accepts plain names
+- name: Update location and contact in one container (SR OS)
   nokia.openconfig.gnmi_set:
     prefix: /configure
+    encoding: json
     update:
-      - path: system/location
-        value: Melbourne
-      - path: system/contact
-        value: nokia
-    replace:
-      - path: service/md-auto-id
+      - path: system
         value:
-          service-id-range:
-            start: 10000
-            end: 99999
-    delete:
-      - system/cron
+          location: Antwerp
+          contact: noc@example.com
 
-# gnmic set --request-file set-request.yml
-- name: Apply a gNMIc request file
+- name: Update and replace in one transaction (SR Linux)
+  nokia.openconfig.gnmi_set:
+    update:
+      - path: /system/information
+        value:
+          location: Antwerp
+          contact: noc@example.com
+    replace:
+      - path: /interface[name=ethernet-1/1]/description
+        value: uplink to spine1
+
+- name: Apply a request file
   nokia.openconfig.gnmi_set:
     request_file: set-request.yml
 
-- name: Start a confirmed commit, rolled back after 1 minute
+- name: Start a confirmed commit, rolled back after 1 minute (SR OS)
   nokia.openconfig.gnmi_set:
     update:
-      - path: /system/name/host-name
-        value: leaf1
+      - path: /configure/system/location
+        value: Antwerp
+    commit_id: change-42
+    commit_request: true
+    rollback_duration: 1m
+
+- name: Start a confirmed commit, rolled back after 1 minute (SR Linux)
+  nokia.openconfig.gnmi_set:
+    update:
+      - path: /system/information/location
+        value: Antwerp
     commit_id: change-42
     commit_request: true
     rollback_duration: 1m
@@ -225,19 +240,27 @@ EXAMPLES = """
     commit_id: change-42
     commit_confirm: true
 
-- name: Show the request without sending it
+- name: Show a delete request without sending it (SR OS)
+  nokia.openconfig.gnmi_set:
+    delete:
+      - /configure/port[port-id=1/1/c1/1]/description
+    dry_run: true
+  register: preview
+
+- name: Show a delete request without sending it (SR Linux)
   nokia.openconfig.gnmi_set:
     delete:
       - /interface[name=ethernet-1/1]/description
     dry_run: true
   register: preview
 
-- name: Backup, then restore
+- name: Save the configuration to a backup file
   nokia.openconfig.gnmi_set:
     backup: true
   register: backup
 
-- name: Restore the backup
+# The full restore with a replace of / is validated on SR Linux
+- name: Restore the backup (SR Linux)
   nokia.openconfig.gnmi_set:
     replace:
       - path: /

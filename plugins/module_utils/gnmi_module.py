@@ -23,7 +23,7 @@ def to_json(data):
 
 
 def normalize_enum(module, name, choices, value=None):
-    """Upper-cases an enum parameter and validates it, like gNMIc does."""
+    """Upper-cases an enum parameter and validates it against the protobuf enum names."""
     if value is None:
         value = module.params.get(name)
     if value is None:

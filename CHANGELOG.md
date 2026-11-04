@@ -4,42 +4,56 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0-beta.1] - Unreleased
+## [2.0.0] - Unreleased
 
-Modules now follow the gNMIc commands and flags, and the connection follows `ansible.netcommon.grpc`. This is a breaking release: the 1.0.0 connection, module, option and parameter names were removed. See "Removed" below for the replacements.
+Module options follow the request fields of the gNMI, gNOI and gNSI specifications, the connection follows `ansible.netcommon.grpc`, and gNOI and gNSI are supported with one module per RPC. This is a breaking release: the 1.0.0 connection, module, option and parameter names were removed. See "Removed" below for the replacements.
 
 ### Added
-- Connection plugin `nokia.openconfig.grpc`, which replaces `nokia.openconfig.gnmi`. The new name leaves room for gNOI and gNSI.
-- gNMI 0.10.0 protos (gnmi v0.14.1), compiled by `tools/build_protos.sh` with a pinned protoc 3.19.5 (grpcio-tools 1.47.5), so the generated code works with protobuf 3.20.3 up to 7.x and any grpcio release.
+- Connection plugin `nokia.openconfig.grpc`, which replaces `nokia.openconfig.gnmi`. It carries gNMI, gNOI and gNSI on one persistent gRPC channel.
+- gNMI 0.10.0 protos (gnmi v0.14.1), compiled by `tools/build_openconfig_protos.sh` with a pinned protoc 3.19.5 (grpcio-tools 1.47.5), so the generated code works with protobuf 3.20.3 up to 7.x and any grpcio release.
 - Depth extension: `depth` on `gnmi_get` and `gnmi_subscribe`.
 - Commit extension (confirmed commit) on `gnmi_set`: `commit_id`, `commit_request`, `commit_confirm`, `commit_cancel`, `rollback_duration`.
 - ConfigSubscription extension: `config_subscription` on `gnmi_subscribe`. In `STREAM` mode it waits for the next sync-done.
 - Response extensions are returned as `extensions`, using protobuf field names.
 - `gnmi_get`: `target`, `model`, `encoding`, `values_only`.
-- `gnmi_set`: `target`, `encoding`, per-item `encoding`, `request_file` (gNMIc set-request file), `dry_run`, check mode, and `diff`.
+- `gnmi_set`: `target`, `encoding`, per-item `encoding`, `request_file` (JSON or YAML request file), `dry_run`, check mode, and `diff`.
 - `gnmi_subscribe`:
-  - `path` with `stream_mode`, `sample_interval`, `heartbeat_interval` and `suppress_redundant` (gNMIc flags).
+  - `path` with `stream_mode`, `sample_interval`, `heartbeat_interval` and `suppress_redundant`.
   - `POLL` mode, `target`, `model`, `encoding`.
 - `gnmi_capabilities` returns `gnmi_version`, `encodings`, `models` and `extensions` next to the raw `output`.
 - Connection options:
+  - `validate_certs` (ini `grpc_connection`, env `ANSIBLE_GRPC_VALIDATE_CERTS`, var `ansible_grpc_validate_certs`). When `false`, pins the server TLS certificate at connect time for lab use.
   - `ssl_target_name_override`.
   - `[defaults]` and `[persistent_connection]` ini and `ANSIBLE_*` environment sources for port, user and timeouts.
   - `persistent_command_timeout` is used as the gRPC deadline for Capabilities, Get and Set.
-- Unit tests with a fake gNMI server, and `ansible-test sanity` and `units` in CI on ansible-core 2.20, 2.21 and 2.22.
-- Integration test categories `depth`, `commit_confirmed` and `config_subscription`. They check that each extension takes effect, so a server that silently ignores it fails the test. Every playbook now asserts its results.
-- `run.sh units`, `run.sh sanity` and `run.sh integration`, plus JUnit and Markdown reports.
-- CI integration job on containerlab: SR Linux always, and SR OS when the `SRSIM_LICENSE` secret is set. A weekly `devel` workflow runs sanity and units.
+- OpenConfig gNOI and gNSI: one module per RPC that Nokia SR OS or SR Linux supports, named `gnoi_<service>_<rpc>` and `gnsi_<service>_<rpc>` (39 modules). gNSI requires SR Linux with gNSI enabled on the gRPC server.
+  - gNOI System: `gnoi_system_time`, `gnoi_system_ping`, `gnoi_system_traceroute`, `gnoi_system_reboot`, `gnoi_system_cancel_reboot`, `gnoi_system_reboot_status`, `gnoi_system_switch_control_processor`, `gnoi_system_kill_process`, `gnoi_system_set_package`.
+  - gNOI File: `gnoi_file_get`, `gnoi_file_put`, `gnoi_file_stat`, `gnoi_file_remove`, `gnoi_file_transfer_to_remote`.
+  - gNOI OS: `gnoi_os_install`, `gnoi_os_activate`, `gnoi_os_verify`.
+  - gNOI FactoryReset, Healthz and BGP: `gnoi_factory_reset_start`, `gnoi_healthz_get`, `gnoi_healthz_list`, `gnoi_healthz_acknowledge`, `gnoi_healthz_check`, `gnoi_healthz_artifact`, `gnoi_bgp_clear_bgp_neighbor`.
+  - gNSI: `gnsi_authz_get`, `gnsi_authz_probe`, `gnsi_authz_rotate`, `gnsi_certz_get_profile_list`, `gnsi_certz_can_generate_csr`, `gnsi_certz_add_profile`, `gnsi_certz_delete_profile`, `gnsi_certz_rotate`, `gnsi_pathz_get`, `gnsi_pathz_probe`, `gnsi_pathz_rotate`, `gnsi_credentialz_get_public_keys`, `gnsi_credentialz_can_generate_key`, `gnsi_credentialz_rotate_account_credentials`, `gnsi_credentialz_rotate_host_parameters`.
+- gNOI and gNSI module options are the RPC request fields in snake_case; path options take gNMI path strings and duration options take values such as `500ms`. Read-only RPCs run in check mode, all others are skipped. Streams are opened and drained by the connection, so playbooks never handle an open stream. A relative `local_path` is resolved against the working directory of `ansible-playbook`.
+- `tools/sync_openconfig_protos.sh` refreshes the gNMI, gNOI and gNSI `.proto` sources from [openconfig/gnmi](https://github.com/openconfig/gnmi), [openconfig/gnoi](https://github.com/openconfig/gnoi) and [openconfig/gnsi](https://github.com/openconfig/gnsi).
+- `tools/nokia_grpc_modules.yaml` lists every shipped gNOI and gNSI RPC with its platforms and how it is validated, and `tools/generate_grpc_modules.py` generates the modules from it.
+- **MkDocs** user documentation under `docs/`, built with `make docs` / `make docs-serve` and published to GitHub Pages (`.github/workflows/docs.yml`). The module reference is generated from docstrings by `tools/generate_docs.py`, grouped by gNMI, gNOI and gNSI. Each streaming module documents in its reference page how the task runs the stream and when it completes.
+- In-process **`OpenConfigMockServer`** for connection unit tests: gNMI plus exactly the gNOI and gNSI RPCs of the manifest on one port. Unit tests fail when the modules, the connection or the mock server differ from the manifest.
+- `ansible-test sanity` and `units` in CI on ansible-core 2.20, 2.21 and 2.22, and a weekly `devel` workflow.
+- Integration test categories per YANG model family: `_OC` playbooks use OpenConfig paths, `_SROS` and `_SRL` playbooks native YANG. The `depth`, `commit_confirmed` and `config_subscription` categories check that each extension takes effect, so a server that silently ignores it fails the test. The `gnoi` and `gnsi` categories cover every RPC marked for integration in the manifest. Every playbook asserts its results.
+- `run.sh units`, `run.sh sanity` and `run.sh integration`, plus JUnit and Markdown reports. A category whose inventory group has no hosts is reported as skipped.
+- CI integration job on containerlab: SR Linux always, and SR OS when the `SRSIM_LICENSE` secret is set.
 
 ### Changed
 - `gnmi_config` is renamed to `gnmi_set`.
-- `gnmi_get` `type` defaults to `ALL` instead of `CONFIG`, matching gNMIc.
-- `gnmi_subscribe` `mode` defaults to `STREAM` instead of `ONCE`, matching gNMIc.
+- `gnmi_get` `type` defaults to `ALL` instead of `CONFIG`, matching the gNMI specification.
+- `gnmi_subscribe` `mode` defaults to `STREAM` instead of `ONCE`, matching the gNMI specification.
 - Connection options are renamed to the `ansible.netcommon.grpc` names, and the ini section is now `[grpc_connection]`.
 - Supported versions are ansible-core 2.20 or newer and controller Python 3.12 or newer. `grpcio` must be 1.59.0 or newer and `protobuf` 3.20.3 or newer (5.29.0 or newer on Python 3.14).
 - A missing, too old or broken `grpcio` or `protobuf` fails with a message that names the problem, the Python interpreter and the `pip` command to fix it.
 - `meta/execution-environment.yml` points `ansible-builder` to `requirements.txt`.
 - The protos and generated code moved to `plugins/module_utils/proto`. The unused `collector.proto` and `target.proto` were dropped.
 - gRPC errors are reported as `gRPC <CODE>: <details>`.
+- `galaxy.yml` `documentation` and `homepage` URLs point to the GitHub Pages site, and the repository and issue URLs were corrected.
+- README and CONTRIBUTING describe the docs site and local MkDocs workflow.
 
 ### Removed
 The 1.0.0 names below were removed. Playbooks using the old connection or module name fail with a message that names the replacement, and so do the old `gnmi_set` and `gnmi_subscribe` keys.
@@ -58,15 +72,13 @@ The 1.0.0 names below were removed. Playbooks using the old connection or module
 ### Fixed
 - IPv6 management addresses: `ansible_host: 2001:db8::1` failed to connect because the address was not put in brackets. Both forms, with and without brackets, now work.
 - Release tarballs did not contain the compiled protos, so the connection plugin could not be imported.
-- Subscribe results were truncated at the first response without updates, for example a ConfigSubscription sync-done.
+- Subscribe results were truncated at the first response without updates.
 - Path origins were lost when decoding responses.
-- `depth: 0` and `false` values were silently dropped from requests.
+- `0` and `false` values were silently dropped from requests.
 - A missing certificate file now fails with a clear error.
+- `gnmi_subscribe` in check mode skips the Subscribe RPC and returns `skipped: true`; it used to call the device.
 - Source file lookup in the shared network action code did not detect URLs or role-relative paths.
-- Re-enabled the Restore integration test.
-- `run.sh` no longer reports success when an inventory group has no hosts.
 - The SR Linux image in the lab topologies used the SR OS version variable.
-- `galaxy.yml` repository, documentation and issue URLs.
 
 ## [1.0.0]
 ### Added

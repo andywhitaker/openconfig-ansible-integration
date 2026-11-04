@@ -66,8 +66,8 @@ def set_rollback_duration(commit_id, duration):
 def commit_extension(commit_id=None, commit_request_=False, commit_confirm_=False,
                      commit_cancel_=False, rollback_duration=None):
     """
-    Maps the gNMIc set flags (--commit-id, --commit-request, --commit-confirm,
-    --commit-cancel, --rollback-duration) to a single Commit extension.
+    Maps the commit options (commit_id, commit_request, commit_confirm,
+    commit_cancel, rollback_duration) to a single Commit extension.
     """
     actions = [a for a in (commit_request_, commit_confirm_, commit_cancel_) if a]
     if len(actions) > 1:

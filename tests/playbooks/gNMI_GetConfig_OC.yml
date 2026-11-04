@@ -1,21 +1,34 @@
 ---
-- name: OpenConfig Get Configuration
+# SR OS returns OpenConfig configuration only for what was configured through
+# OpenConfig, so the configuration may be empty there; state is always there.
+- name: OpenConfig Get
   hosts: all
   gather_facts: false
 
   vars:
     ansible_connection: nokia.openconfig.grpc
+  vars_files:
+    - vars/model_oc.yml
 
   tasks:
-    - name: Get OpenConfig interfaces
+    - name: Get OpenConfig LLDP configuration
       nokia.openconfig.gnmi_get:
         type: config
         path:
-          - /oc:interfaces/interface[name=*]
-      register: interfaces
+          - "{{ oc_lldp_config_path }}"
+        values_only: true
+      register: lldp_config
 
-    - name: Check that interfaces were returned
+    - name: Get OpenConfig LLDP configuration and state
+      nokia.openconfig.gnmi_get:
+        type: all
+        path:
+          - "{{ oc_lldp_path }}"
+      register: lldp_all
+
+    - name: Check the OpenConfig responses
       ansible.builtin.assert:
         that:
-          - interfaces.output | from_json | length > 0
-          - interfaces.output is search('"interface"')
+          - lldp_config.output | from_json is sequence
+          - (lldp_config.output | from_json | length == 0) or lldp_config.output is search('enabled"')
+          - lldp_all.output is search('chassis-id"')

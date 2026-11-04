@@ -1,0 +1,56 @@
+---
+# Read-only gNOI System RPCs. The device pings and traces its own management
+# address in gnoi_network_instance (platform group_vars).
+- name: gNOI System
+  hosts: all
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+
+  tasks:
+    - name: Get the device time
+      nokia.openconfig.gnoi_system_time:
+      register: time
+
+    - name: Check the time
+      ansible.builtin.assert:
+        that:
+          - time is not changed
+          - (time.output | from_json).time | int > 0
+
+    - name: Ping the management address
+      nokia.openconfig.gnoi_system_ping:
+        destination: "{{ ansible_host }}"
+        network_instance: "{{ gnoi_network_instance }}"
+        count: 2
+        # SR OS accepts whole seconds only
+        interval: 1s
+      register: ping
+
+    - name: Check the ping replies and summary
+      vars:
+        responses: "{{ ping.output | from_json }}"
+      ansible.builtin.assert:
+        that:
+          - ping is not changed
+          - responses | selectattr('sequence', 'defined') | list | length == 2
+          - responses | selectattr('received', 'defined') | map(attribute='received') | first | int == 2
+
+    # SR OS supports UDP traceroute only
+    - name: Traceroute to the management address
+      nokia.openconfig.gnoi_system_traceroute:
+        destination: "{{ ansible_host }}"
+        network_instance: "{{ gnoi_network_instance }}"
+        l4protocol: UDP
+        max_ttl: 5
+      register: traceroute
+
+    - name: Check the traceroute hops
+      vars:
+        responses: "{{ traceroute.output | from_json }}"
+      ansible.builtin.assert:
+        that:
+          - traceroute is not changed
+          - responses | selectattr('destinationAddress', 'defined') | list | length == 1
+          - responses | selectattr('hop', 'defined') | list | length > 0

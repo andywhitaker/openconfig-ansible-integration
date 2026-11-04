@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Git tag to attach the artifact to (e.g., 2.0.0-beta.1)"
+        description: "Git tag to attach the artifact to (e.g., 2.0.0)"
         required: true
 
 permissions:
@@ -33,7 +33,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Build python wrappers for gRPC proto files
-        run: tools/build_protos.sh
+        run: tools/build_openconfig_protos.sh
 
       - name: Build collection
         run: ansible-galaxy collection build .

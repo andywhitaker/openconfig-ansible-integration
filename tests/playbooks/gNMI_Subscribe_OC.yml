@@ -5,12 +5,14 @@
 
   vars:
     ansible_connection: nokia.openconfig.grpc
+  vars_files:
+    - vars/model_oc.yml
 
   tasks:
     - name: Sample interface counters every second for 5 seconds
       nokia.openconfig.gnmi_subscribe:
         path:
-          - /oc:interfaces/interface[name=*]/state/counters
+          - "{{ oc_counters_path }}"
         stream_mode: sample
         sample_interval: 1s
         duration: 5

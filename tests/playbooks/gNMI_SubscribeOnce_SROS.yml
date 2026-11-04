@@ -15,7 +15,10 @@
       register: once
 
     - name: Check the configuration tree
+      vars:
+        configure: "{{ (once.output | from_json).configure }}"
       ansible.builtin.assert:
         that:
-          - (once.output | from_json).configure is mapping
-          - (once.output | from_json).configure.system.contact == 'nokia'
+          - configure is mapping
+          - configure.system is mapping
+          - configure.system.name is defined

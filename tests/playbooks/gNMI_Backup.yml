@@ -8,6 +8,12 @@
     backup_dir: "{{ playbook_dir }}/../output/backup"
 
   tasks:
+    - name: Ensure backup directory exists
+      ansible.builtin.file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: "0755"
+
     - name: Backup the configuration
       nokia.openconfig.gnmi_set:
         backup: true

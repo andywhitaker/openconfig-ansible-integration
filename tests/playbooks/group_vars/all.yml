@@ -1,0 +1,6 @@
+---
+# Connection settings shared by every integration playbook. YANG paths live
+# with their model family: vars/model_oc.yml for OpenConfig (loaded with
+# vars_files by the _OC playbooks), nokia_srsim.yml and nokia_srlinux.yml for
+# native SR OS and SR Linux YANG.
+ansible_connection: nokia.openconfig.grpc

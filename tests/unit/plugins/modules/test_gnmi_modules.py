@@ -136,6 +136,21 @@ def test_set_check_mode_returns_request(connection, run_module):
     assert result['changed'] is False
 
 
+def test_set_check_mode_backup_only_skips_get(connection, run_module):
+    result = run_module(gnmi_set.main, {'backup': True}, check_mode=True)
+    assert connection.calls == []
+    assert result['changed'] is False
+    assert '__backup__' not in result
+
+
+def test_set_check_mode_with_update_skips_backup_get(connection, run_module):
+    connection.responses['gnmiSet'] = {'request': {'update': [{'path': 'a'}]}}
+    result = run_module(gnmi_set.main, {'backup': True, 'update': [{'path': 'a', 'value': 1}]}, check_mode=True)
+    assert connection.methods() == ['gnmiSet']
+    assert 'gnmiGet' not in connection.methods()
+    assert result['changed'] is False
+
+
 def test_set_dry_run(connection, run_module):
     connection.responses['gnmiSet'] = {'request': {'delete': [{}]}}
     result = run_module(gnmi_set.main, {'delete': ['/a'], 'dry_run': True})
@@ -223,6 +238,13 @@ def test_set_backup_with_change_uses_full_snapshots(connection, run_module):
 
 
 # gnmi_subscribe
+
+def test_subscribe_check_mode_skips_rpc(connection, run_module):
+    result = run_module(gnmi_subscribe.main, {'path': ['/a'], 'mode': 'once'}, check_mode=True)
+    assert connection.calls == []
+    assert result['skipped'] is True
+    assert result['changed'] is False
+
 
 def test_subscribe_defaults_and_normalization(connection, run_module):
     connection.responses['gnmiSubscribe'] = {'output': [{'values': {'a': 1}}], 'extensions': []}

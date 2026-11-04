@@ -1,0 +1,1292 @@
+---
+# gNOI and gNSI RPCs shipped as nokia.openconfig modules.
+#
+# Only RPCs that Nokia SR OS and/or SR Linux implement are listed here. The
+# OpenConfig .proto trees under plugins/module_utils/proto are complete, but a
+# module (and an OpenConfigMockServer handler) exists only for entries below.
+#
+# tools/generate_grpc_modules.py renders plugins/modules/<module>.py from this
+# file; tests/unit/plugins/test_grpc_manifest.py fails when modules, the mock
+# server or the connection streaming tables drift from it.
+#
+# Entry keys:
+#   module       FQCN suffix: <protocol>_<service>_<rpc> in snake_case
+#   protocol     gnoi | gnsi
+#   service      connection service key (snake_case proto service)
+#   rpc          proto RPC name
+#   pattern      unary | server_streaming | client_streaming | bidi_streaming
+#   platforms    sros and/or srl
+#   validation   unit (mock server) and/or integration (tests/playbooks)
+#   read_only    true: runs in check mode, changed=false
+#   stream_message  request message of a gNSI Rotate stream (O(stream) items)
+#   options      typed options; non-doc keys:
+#                  field      protobuf JSON field the value is written to
+#                  encode     path | paths | duration (gnmi path string(s), Go duration -> ns)
+#                  transport  connection keyword argument instead of a request field
+#   returns      extra RETURN entries beyond output
+#
+# Not shipped (UNIMPLEMENTED on SR OS and SR Linux in the integration lab):
+#   gNOI LinkQualification.*, gNSI Certz.GetIntegrityManifest
+
+modules:
+
+  # ---------------------------------------------------------------- gNOI System
+
+  - module: gnoi_system_time
+    protocol: gnoi
+    service: system
+    rpc: Time
+    pattern: unary
+    platforms: [sros, srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: Get the device time over gNOI
+    description:
+      - Invokes gNOI C(System.Time) and returns the device time in nanoseconds since the epoch.
+    options: {}
+    examples: |
+      - name: Query device time
+        nokia.openconfig.gnoi_system_time:
+        register: result
+
+  - module: gnoi_system_ping
+    protocol: gnoi
+    service: system
+    rpc: Ping
+    pattern: server_streaming
+    platforms: [sros, srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: Ping from the device over gNOI
+    description:
+      - Invokes gNOI C(System.Ping) and returns one entry per streamed response, the last being the summary.
+    options:
+      destination:
+        description: Destination address to ping.
+        type: str
+        required: true
+        field: destination
+      source:
+        description: Source address to ping from.
+        type: str
+        field: source
+      count:
+        description: Number of packets.
+        type: int
+        field: count
+      interval:
+        description:
+          - Time between requests, as Go duration (C(500ms), C(1s)) or seconds.
+          - SR OS accepts whole seconds only.
+        type: raw
+        field: interval
+        encode: duration
+      wait:
+        description: Time to wait for a response, as Go duration or seconds.
+        type: raw
+        field: wait
+        encode: duration
+      size:
+        description: Size of the request packet, excluding the ICMP header.
+        type: int
+        field: size
+      do_not_fragment:
+        description: Set the do-not-fragment bit (IPv4).
+        type: bool
+        field: doNotFragment
+      do_not_resolve:
+        description: Do not resolve the returned addresses.
+        type: bool
+        field: doNotResolve
+      l3protocol:
+        description: Layer-3 protocol.
+        type: str
+        choices: [IPV4, IPV6]
+        field: l3protocol
+      network_instance:
+        description: Network instance, for example C(management) or C(Base) on SR OS, C(mgmt) or C(default) on SR Linux.
+        type: str
+        field: networkInstance
+    examples: |
+      - name: Ping from the management router (SR OS)
+        nokia.openconfig.gnoi_system_ping:
+          destination: 192.0.2.1
+          network_instance: management
+          count: 3
+          interval: 1s
+        register: ping
+
+      - name: Ping from the management network instance (SR Linux)
+        nokia.openconfig.gnoi_system_ping:
+          destination: 192.0.2.1
+          network_instance: mgmt
+          count: 3
+          interval: 200ms
+        register: ping
+
+      - name: Show the summary
+        ansible.builtin.debug:
+          msg: "{{ (ping.output | from_json) | last }}"
+
+  - module: gnoi_system_traceroute
+    protocol: gnoi
+    service: system
+    rpc: Traceroute
+    pattern: server_streaming
+    platforms: [sros, srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: Traceroute from the device over gNOI
+    description:
+      - Invokes gNOI C(System.Traceroute) and returns one entry per streamed hop response.
+    options:
+      destination:
+        description: Destination address.
+        type: str
+        required: true
+        field: destination
+      source:
+        description: Source address.
+        type: str
+        field: source
+      initial_ttl:
+        description: Initial TTL.
+        type: int
+        field: initialTtl
+      max_ttl:
+        description: Maximum number of hops.
+        type: int
+        field: maxTtl
+      wait:
+        description: Time to wait for a response, as Go duration or seconds.
+        type: raw
+        field: wait
+        encode: duration
+      do_not_fragment:
+        description: Set the do-not-fragment bit (IPv4).
+        type: bool
+        field: doNotFragment
+      do_not_resolve:
+        description: Do not resolve the returned addresses.
+        type: bool
+        field: doNotResolve
+      l3protocol:
+        description: Layer-3 protocol.
+        type: str
+        choices: [IPV4, IPV6]
+        field: l3protocol
+      l4protocol:
+        description: Probe protocol. SR OS only supports C(UDP).
+        type: str
+        choices: [ICMP, TCP, UDP]
+        field: l4protocol
+      do_not_lookup_asn:
+        description: Do not look up the ASN of each hop.
+        type: bool
+        field: doNotLookupAsn
+      network_instance:
+        description: Network instance to trace in, for example C(Base) on SR OS or C(default) on SR Linux.
+        type: str
+        field: networkInstance
+    examples: |
+      - name: Traceroute in the base router (SR OS)
+        nokia.openconfig.gnoi_system_traceroute:
+          destination: 192.0.2.1
+          network_instance: Base
+          l4protocol: UDP
+          max_ttl: 5
+          wait: 1s
+
+      - name: Traceroute in the default network instance (SR Linux)
+        nokia.openconfig.gnoi_system_traceroute:
+          destination: 192.0.2.1
+          network_instance: default
+          max_ttl: 5
+          wait: 1s
+          do_not_resolve: true
+
+  - module: gnoi_system_reboot
+    protocol: gnoi
+    service: system
+    rpc: Reboot
+    pattern: unary
+    platforms: [sros, srl]
+    validation: [unit]
+    read_only: false
+    short_description: Reboot the device or a subcomponent over gNOI
+    description:
+      - Invokes gNOI C(System.Reboot).
+    options:
+      method:
+        description: Reboot method.
+        type: str
+        choices: [COLD, POWERDOWN, HALT, WARM, NSF, POWERUP]
+        field: method
+      delay:
+        description: Delay before the reboot, as Go duration or seconds.
+        type: raw
+        field: delay
+        encode: duration
+      reason:
+        description: Informational reason for the reboot, sent as the request C(message) field.
+        type: str
+        field: message
+      subcomponents:
+        description:
+          - Subcomponent paths to reboot (gNMI path syntax), using the native models, for example
+            C(/state/cpm[cpm-slot=A]) on SR OS or C(/platform/control[slot=A]) on SR Linux.
+        type: list
+        elements: str
+        field: subcomponents
+        encode: paths
+      force:
+        description: Force the reboot, skipping sanity checks.
+        type: bool
+        field: force
+    examples: |
+      - name: Cold reboot of CPM A in one minute (SR OS)
+        nokia.openconfig.gnoi_system_reboot:
+          method: COLD
+          delay: 1m
+          reason: maintenance
+          subcomponents:
+            - /state/cpm[cpm-slot=A]
+
+      - name: Cold reboot in one minute (SR Linux)
+        nokia.openconfig.gnoi_system_reboot:
+          method: COLD
+          delay: 1m
+          reason: maintenance
+
+  - module: gnoi_system_cancel_reboot
+    protocol: gnoi
+    service: system
+    rpc: CancelReboot
+    pattern: unary
+    platforms: [sros, srl]
+    validation: [unit]
+    read_only: false
+    short_description: Cancel a pending reboot over gNOI
+    description:
+      - Invokes gNOI C(System.CancelReboot).
+    options:
+      reason:
+        description: Informational reason for the cancel, sent as the request C(message) field.
+        type: str
+        field: message
+      subcomponents:
+        description:
+          - Subcomponent paths (gNMI path syntax), using the native models, for example
+            C(/state/cpm[cpm-slot=A]) on SR OS or C(/platform/control[slot=A]) on SR Linux.
+        type: list
+        elements: str
+        field: subcomponents
+        encode: paths
+    examples: |
+      - name: Cancel a pending reboot of CPM A (SR OS)
+        nokia.openconfig.gnoi_system_cancel_reboot:
+          reason: change aborted
+          subcomponents:
+            - /state/cpm[cpm-slot=A]
+
+      - name: Cancel a pending reboot (SR Linux)
+        nokia.openconfig.gnoi_system_cancel_reboot:
+          reason: change aborted
+
+  - module: gnoi_system_reboot_status
+    protocol: gnoi
+    service: system
+    rpc: RebootStatus
+    pattern: unary
+    platforms: [sros, srl]
+    validation: [unit]
+    read_only: true
+    short_description: Get the status of a pending reboot over gNOI
+    description:
+      - Invokes gNOI C(System.RebootStatus).
+    options:
+      subcomponents:
+        description:
+          - Subcomponent paths (gNMI path syntax), using the native models, for example
+            C(/state/cpm[cpm-slot=A]) on SR OS or C(/platform/control[slot=A]) on SR Linux.
+          - SR OS requires at least one subcomponent.
+        type: list
+        elements: str
+        field: subcomponents
+        encode: paths
+    examples: |
+      - name: Check for a pending reboot of CPM A (SR OS)
+        nokia.openconfig.gnoi_system_reboot_status:
+          subcomponents:
+            - /state/cpm[cpm-slot=A]
+        register: status
+
+      - name: Check for a pending reboot (SR Linux)
+        nokia.openconfig.gnoi_system_reboot_status:
+        register: status
+
+  - module: gnoi_system_switch_control_processor
+    protocol: gnoi
+    service: system
+    rpc: SwitchControlProcessor
+    pattern: unary
+    platforms: [sros, srl]
+    validation: [unit]
+    read_only: false
+    short_description: Switch to the standby control processor over gNOI
+    description:
+      - Invokes gNOI C(System.SwitchControlProcessor).
+    options:
+      control_processor:
+        description:
+          - Path of the control processor to switch to (gNMI path syntax), using the native models, for example
+            C(/state/cpm[cpm-slot=B]) on SR OS or C(/platform/control[slot=B]) on SR Linux.
+        type: str
+        required: true
+        field: controlProcessor
+        encode: path
+    examples: |
+      - name: Switch to CPM B (SR OS)
+        nokia.openconfig.gnoi_system_switch_control_processor:
+          control_processor: /state/cpm[cpm-slot=B]
+
+      - name: Switch to control module B (SR Linux)
+        nokia.openconfig.gnoi_system_switch_control_processor:
+          control_processor: /platform/control[slot=B]
+
+  - module: gnoi_system_kill_process
+    protocol: gnoi
+    service: system
+    rpc: KillProcess
+    pattern: unary
+    platforms: [sros, srl]
+    validation: [unit]
+    read_only: false
+    short_description: Signal a process on the device over gNOI
+    description:
+      - Invokes gNOI C(System.KillProcess).
+    options:
+      pid:
+        description: Process ID.
+        type: int
+        field: pid
+      name:
+        description: Process name.
+        type: str
+        field: name
+      signal:
+        description: Signal to send.
+        type: str
+        choices: [SIGNAL_TERM, SIGNAL_KILL, SIGNAL_HUP, SIGNAL_ABRT]
+        field: signal
+      restart:
+        description: Restart the process after it terminates.
+        type: bool
+        field: restart
+    examples: |
+      - name: Restart the BGP manager (SR Linux)
+        nokia.openconfig.gnoi_system_kill_process:
+          name: sr_bgp_mgr
+          signal: SIGNAL_TERM
+          restart: true
+
+  - module: gnoi_system_set_package
+    protocol: gnoi
+    service: system
+    rpc: SetPackage
+    pattern: client_streaming
+    platforms: [sros, srl]
+    validation: [unit]
+    read_only: false
+    short_description: Upload a software package over gNOI
+    description:
+      - Invokes gNOI C(System.SetPackage), streaming a local package file to the device.
+    options:
+      local_path:
+        description: Package file on the controller. A relative path is resolved against the working directory of ansible-playbook.
+        type: path
+        required: true
+        transport: local_path
+      package_filename:
+        description: Destination file name on the device. Defaults to the local file name.
+        type: str
+        transport: package_filename
+      package_version:
+        description: Package version string.
+        type: str
+        transport: package_version
+      package_activate:
+        description: Activate the package after upload.
+        type: bool
+        transport: package_activate
+    examples: |
+      - name: Upload a package
+        nokia.openconfig.gnoi_system_set_package:
+          local_path: ./package.tgz
+          package_version: '1.0'
+
+  # ------------------------------------------------------------------ gNOI File
+
+  - module: gnoi_file_get
+    protocol: gnoi
+    service: file
+    rpc: Get
+    pattern: server_streaming
+    platforms: [sros, srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: Download a file from the device over gNOI
+    description:
+      - Invokes gNOI C(File.Get) and writes the streamed contents to a file on the controller.
+    options:
+      remote_path:
+        description: File on the device, for example C(/etc/hostname) on SR Linux or C(cf3:/bof.cfg) on SR OS.
+        type: str
+        required: true
+        transport: remote_path
+      local_path:
+        description: Destination file on the controller. A relative path is resolved against the working directory of ansible-playbook. Without it only the stream messages are returned.
+        type: path
+        transport: save_to
+    returns:
+      hash:
+        description: Hash sent by the device at the end of the stream.
+        type: dict
+        returned: when supported
+      local_path:
+        description: File written on the controller.
+        type: str
+        returned: when O(local_path) is set
+    examples: |
+      - name: Download the saved configuration (SR OS)
+        nokia.openconfig.gnoi_file_get:
+          remote_path: cf3:/config.cfg
+          local_path: "./{{ inventory_hostname }}.cfg"
+
+      - name: Download the saved configuration (SR Linux)
+        nokia.openconfig.gnoi_file_get:
+          remote_path: /etc/opt/srlinux/config.json
+          local_path: "./{{ inventory_hostname }}.json"
+
+  - module: gnoi_file_put
+    protocol: gnoi
+    service: file
+    rpc: Put
+    pattern: client_streaming
+    platforms: [sros, srl]
+    validation: [unit, integration]
+    read_only: false
+    short_description: Upload a file to the device over gNOI
+    description:
+      - Invokes gNOI C(File.Put), streaming a local file in 64 KiB chunks followed by its SHA-256 hash.
+    options:
+      local_path:
+        description: Source file on the controller. A relative path is resolved against the working directory of ansible-playbook.
+        type: path
+        required: true
+        transport: local_path
+      remote_path:
+        description: Destination file on the device.
+        type: str
+        required: true
+        transport: remote_path
+      permissions:
+        description:
+          - Unix permissions of the remote file, as octal digits.
+          - SR OS accepts only C(777) and C(555). A file uploaded with C(555) is read-only and cannot be
+            overwritten or removed over gNOI.
+        type: int
+        default: 644
+        transport: permissions
+    examples: |
+      - name: Upload a file to the compact flash (SR OS)
+        nokia.openconfig.gnoi_file_put:
+          local_path: ./banner.txt
+          remote_path: cf3:/banner.txt
+          permissions: 777
+
+      - name: Upload a file (SR Linux)
+        nokia.openconfig.gnoi_file_put:
+          local_path: ./banner.txt
+          remote_path: /tmp/banner.txt
+          permissions: 644
+
+  - module: gnoi_file_stat
+    protocol: gnoi
+    service: file
+    rpc: Stat
+    pattern: unary
+    platforms: [sros, srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: Get file metadata from the device over gNOI
+    description:
+      - Invokes gNOI C(File.Stat) for a file or directory.
+    options:
+      remote_path:
+        description: File or directory on the device, for example C(/tmp) on SR Linux or C(cf3:/) on SR OS.
+        type: str
+        required: true
+        field: path
+    examples: |
+      - name: List the root of the compact flash (SR OS)
+        nokia.openconfig.gnoi_file_stat:
+          remote_path: cf3:/
+        register: files
+
+      - name: List the configuration directory (SR Linux)
+        nokia.openconfig.gnoi_file_stat:
+          remote_path: /etc/opt/srlinux
+        register: files
+
+      - name: Show the file names
+        ansible.builtin.debug:
+          msg: "{{ (files.output | from_json).stats | map(attribute='path') | list }}"
+
+  - module: gnoi_file_remove
+    protocol: gnoi
+    service: file
+    rpc: Remove
+    pattern: unary
+    platforms: [sros, srl]
+    validation: [unit, integration]
+    read_only: false
+    short_description: Remove a file from the device over gNOI
+    description:
+      - Invokes gNOI C(File.Remove).
+    options:
+      remote_path:
+        description: File on the device.
+        type: str
+        required: true
+        field: remoteFile
+    examples: |
+      - name: Remove a file from the compact flash (SR OS)
+        nokia.openconfig.gnoi_file_remove:
+          remote_path: cf3:/banner.txt
+
+      - name: Remove a file (SR Linux)
+        nokia.openconfig.gnoi_file_remove:
+          remote_path: /tmp/banner.txt
+
+  - module: gnoi_file_transfer_to_remote
+    protocol: gnoi
+    service: file
+    rpc: TransferToRemote
+    pattern: unary
+    platforms: [sros]
+    validation: [unit]
+    read_only: false
+    short_description: Transfer a device file to a remote server over gNOI
+    description:
+      - Invokes gNOI C(File.TransferToRemote); the device uploads one of its files to a remote server.
+    options:
+      remote_path:
+        description: File on the device to transfer.
+        type: str
+        required: true
+        field: localPath
+      remote_download:
+        description:
+          - Destination as gNOI C(RemoteDownload) fields (protobuf JSON names), for example C(path), C(protocol) and C(credentials).
+        type: dict
+        required: true
+        field: remoteDownload
+    examples: |
+      - name: Upload the configuration to an SFTP server (SR OS)
+        nokia.openconfig.gnoi_file_transfer_to_remote:
+          remote_path: cf3:/config.cfg
+          remote_download:
+            path: 192.0.2.10:/backups/config.cfg
+            protocol: SFTP
+            credentials:
+              username: backup
+              cleartext: secret
+
+  # -------------------------------------------------------------------- gNOI OS
+
+  - module: gnoi_os_install
+    protocol: gnoi
+    service: os
+    rpc: Install
+    pattern: bidi_streaming
+    platforms: [srl]
+    validation: [unit]
+    read_only: false
+    short_description: Install an OS image over gNOI
+    description:
+      - Invokes gNOI C(OS.Install), streaming a local image to the device and returning all server messages.
+    notes:
+      - SR Linux hardware platforms only; the SR Linux simulator rejects gNOI OS RPCs.
+      - 'The connection sends a fixed request sequence: C(TransferRequest) with O(os_version) and
+        O(standby_supervisor), the image in 64 KiB C(transfer_content) chunks, then C(TransferEnd). It does
+        not wait for C(TransferReady) before sending the image; gRPC flow control paces the upload.'
+      - The task returns when the device closes the stream, normally after C(Validated) or C(InstallError).
+        All server messages, such as C(TransferReady), C(TransferProgress) and C(Validated), are returned in
+        RV(output). The upload and validation must complete within the command timeout of the connection
+        (C(ansible_command_timeout)); raise it for large images.
+      - The image is installed, not activated. Use M(nokia.openconfig.gnoi_os_activate) to boot it.
+    options:
+      local_path:
+        description: OS image on the controller. A relative path is resolved against the working directory of ansible-playbook.
+        type: path
+        required: true
+        transport: local_path
+      os_version:
+        description: Version string of the image.
+        type: str
+        transport: os_version
+      standby_supervisor:
+        description: Install on the standby supervisor.
+        type: bool
+        transport: standby_supervisor
+    examples: |
+      - name: Transfer an OS image (SR Linux)
+        nokia.openconfig.gnoi_os_install:
+          local_path: ./srlinux-25.10.1.bin
+          os_version: 25.10.1
+
+  - module: gnoi_os_activate
+    protocol: gnoi
+    service: os
+    rpc: Activate
+    pattern: unary
+    platforms: [srl]
+    validation: [unit]
+    read_only: false
+    short_description: Activate an installed OS version over gNOI
+    description:
+      - Invokes gNOI C(OS.Activate). The device reboots unless O(no_reboot) is set.
+    notes:
+      - SR Linux hardware platforms only; the SR Linux simulator rejects gNOI OS RPCs.
+    options:
+      os_version:
+        description: Installed version to activate.
+        type: str
+        required: true
+        field: version
+      standby_supervisor:
+        description: Activate on the standby supervisor.
+        type: bool
+        field: standbySupervisor
+      no_reboot:
+        description: Activate without rebooting.
+        type: bool
+        field: noReboot
+    examples: |
+      - name: Activate a version and reboot (SR Linux)
+        nokia.openconfig.gnoi_os_activate:
+          os_version: 25.10.1
+
+  - module: gnoi_os_verify
+    protocol: gnoi
+    service: os
+    rpc: Verify
+    pattern: unary
+    platforms: [srl]
+    validation: [unit]
+    read_only: true
+    short_description: Get the running OS version over gNOI
+    description:
+      - Invokes gNOI C(OS.Verify).
+    notes:
+      - SR Linux hardware platforms only; the SR Linux simulator rejects gNOI OS RPCs.
+    options: {}
+    examples: |
+      - name: Verify the running version (SR Linux)
+        nokia.openconfig.gnoi_os_verify:
+        register: os
+
+  # --------------------------------------------------------- gNOI FactoryReset
+
+  - module: gnoi_factory_reset_start
+    protocol: gnoi
+    service: factory_reset
+    rpc: Start
+    pattern: unary
+    platforms: [sros, srl]
+    validation: [unit]
+    read_only: false
+    short_description: Factory reset the device over gNOI
+    description:
+      - Invokes gNOI C(FactoryReset.Start).
+    options:
+      factory_os:
+        description: Roll back to the factory OS image.
+        type: bool
+        field: factoryOs
+      zero_fill:
+        description: Zero-fill persistent storage.
+        type: bool
+        field: zeroFill
+      retain_certs:
+        description: Keep certificates across the reset.
+        type: bool
+        field: retainCerts
+    examples: |
+      - name: Factory reset, keeping certificates
+        nokia.openconfig.gnoi_factory_reset_start:
+          retain_certs: true
+
+  # --------------------------------------------------------------- gNOI Healthz
+
+  - module: gnoi_healthz_get
+    protocol: gnoi
+    service: healthz
+    rpc: Get
+    pattern: unary
+    platforms: [srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: Get the health of a component over gNOI
+    description:
+      - Invokes gNOI C(Healthz.Get) for a component.
+    options:
+      path:
+        description: Component path in SR Linux native syntax, for example C(/platform/control[slot=A]).
+        type: str
+        required: true
+        field: path
+        encode: path
+    examples: |
+      - name: Get the health of control module A (SR Linux)
+        nokia.openconfig.gnoi_healthz_get:
+          path: /platform/control[slot=A]
+        register: health
+
+      - name: Show the status and artifact IDs
+        vars:
+          component: "{{ (health.output | from_json).component }}"
+        ansible.builtin.debug:
+          msg: "{{ component.status }} {{ component.artifacts | default([]) | map(attribute='id') | list }}"
+
+  - module: gnoi_healthz_list
+    protocol: gnoi
+    service: healthz
+    rpc: List
+    pattern: unary
+    platforms: [srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: List health events of a component over gNOI
+    description:
+      - Invokes gNOI C(Healthz.List) for a component.
+    options:
+      path:
+        description: Component path in SR Linux native syntax.
+        type: str
+        required: true
+        field: path
+        encode: path
+      include_acknowledged:
+        description: Include acknowledged events.
+        type: bool
+        field: includeAcknowledged
+    examples: |
+      - name: List the health events of control module A (SR Linux)
+        nokia.openconfig.gnoi_healthz_list:
+          path: /platform/control[slot=A]
+          include_acknowledged: true
+
+  - module: gnoi_healthz_acknowledge
+    protocol: gnoi
+    service: healthz
+    rpc: Acknowledge
+    pattern: unary
+    platforms: [srl]
+    validation: [unit]
+    read_only: false
+    short_description: Acknowledge a health event over gNOI
+    description:
+      - Invokes gNOI C(Healthz.Acknowledge).
+    options:
+      path:
+        description: Component path in SR Linux native syntax.
+        type: str
+        required: true
+        field: path
+        encode: path
+      id:
+        description: Event ID to acknowledge.
+        type: str
+        required: true
+        field: id
+    examples: |
+      - name: Acknowledge a health event of control module A (SR Linux)
+        nokia.openconfig.gnoi_healthz_acknowledge:
+          path: /platform/control[slot=A]
+          id: "{{ event_id }}"
+
+  - module: gnoi_healthz_check
+    protocol: gnoi
+    service: healthz
+    rpc: Check
+    pattern: unary
+    platforms: [srl]
+    validation: [unit]
+    read_only: true
+    short_description: Run a health check on a component over gNOI
+    description:
+      - Invokes gNOI C(Healthz.Check).
+    notes:
+      - The check does not change the configuration, but SR Linux collects new artifacts, such as a
+        tech-support archive under C(/tmp), that remain on the device.
+    options:
+      path:
+        description: Component path in SR Linux native syntax.
+        type: str
+        required: true
+        field: path
+        encode: path
+      event_id:
+        description: Re-run the check of an earlier event.
+        type: str
+        field: eventId
+    examples: |
+      - name: Run a health check of control module A (SR Linux)
+        nokia.openconfig.gnoi_healthz_check:
+          path: /platform/control[slot=A]
+
+  - module: gnoi_healthz_artifact
+    protocol: gnoi
+    service: healthz
+    rpc: Artifact
+    pattern: server_streaming
+    platforms: [srl]
+    validation: [unit]
+    read_only: true
+    short_description: Download a health artifact over gNOI
+    description:
+      - Invokes gNOI C(Healthz.Artifact) and returns the streamed artifact messages.
+    options:
+      id:
+        description: Artifact ID from a C(Healthz.Get) or C(Healthz.List) response.
+        type: str
+        required: true
+        field: id
+    examples: |
+      - name: Get the health of control module A (SR Linux)
+        nokia.openconfig.gnoi_healthz_get:
+          path: /platform/control[slot=A]
+        register: health
+
+      - name: Download the first artifact (SR Linux)
+        nokia.openconfig.gnoi_healthz_artifact:
+          id: "{{ (health.output | from_json).component.artifacts[0].id }}"
+
+  # ------------------------------------------------------------------- gNOI BGP
+
+  - module: gnoi_bgp_clear_bgp_neighbor
+    protocol: gnoi
+    service: bgp
+    rpc: ClearBGPNeighbor
+    pattern: unary
+    platforms: [srl]
+    validation: [unit]
+    read_only: false
+    short_description: Clear a BGP session over gNOI
+    description:
+      - Invokes gNOI C(BGP.ClearBGPNeighbor).
+    options:
+      address:
+        description: IPv4 or IPv6 neighbor address.
+        type: str
+        required: true
+        field: address
+      routing_instance:
+        description: Network instance of the BGP neighbor.
+        type: str
+        field: routingInstance
+      mode:
+        description: Clear mode.
+        type: str
+        choices: [SOFT, SOFTIN, HARD_RESET, GRACEFUL_RESET]
+        field: mode
+    examples: |
+      - name: Soft-clear a neighbor in the default network instance (SR Linux)
+        nokia.openconfig.gnoi_bgp_clear_bgp_neighbor:
+          address: 192.0.2.1
+          routing_instance: default
+          mode: SOFT
+
+  # ----------------------------------------------------------------- gNSI Authz
+
+  - module: gnsi_authz_get
+    protocol: gnsi
+    service: authz
+    rpc: Get
+    pattern: unary
+    platforms: [srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: Get the gRPC authorization policy over gNSI
+    description:
+      - Invokes gNSI C(Authz.Get).
+    options:
+      authz_profile_id:
+        description: Authz profile; the default profile when omitted.
+        type: str
+        field: authzProfileId
+    examples: |
+      - name: Read the active Authz policy (SR Linux)
+        nokia.openconfig.gnsi_authz_get:
+        register: authz
+
+  - module: gnsi_authz_probe
+    protocol: gnsi
+    service: authz
+    rpc: Probe
+    pattern: unary
+    platforms: [srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: Check if a user may call a gRPC method over gNSI
+    description:
+      - Invokes gNSI C(Authz.Probe) and returns the policy decision.
+    options:
+      user:
+        description: User name.
+        type: str
+        required: true
+        field: user
+      rpc:
+        description: Fully qualified gRPC method, for example C(/gnmi.gNMI/Get).
+        type: str
+        required: true
+        field: rpc
+    examples: |
+      - name: May admin call gNMI Set? (SR Linux)
+        nokia.openconfig.gnsi_authz_probe:
+          user: admin
+          rpc: /gnmi.gNMI/Set
+
+  - module: gnsi_authz_rotate
+    protocol: gnsi
+    service: authz
+    rpc: Rotate
+    stream_message: RotateAuthzRequest
+    pattern: bidi_streaming
+    platforms: [srl]
+    validation: [unit]
+    read_only: false
+    short_description: Rotate the gRPC authorization policy over gNSI
+    description:
+      - Invokes gNSI C(Authz.Rotate), sending the O(stream) messages in order and returning all server messages.
+    options: {}
+    examples: |
+      - name: Upload and finalize a policy (SR Linux)
+        nokia.openconfig.gnsi_authz_rotate:
+          stream:
+            - uploadRequest:
+                version: v2
+                createdOn: 1700000000
+                policy: "{{ lookup('file', 'authz.json') }}"
+            - finalizeRotation: {}
+
+  # ----------------------------------------------------------------- gNSI Certz
+
+  - module: gnsi_certz_get_profile_list
+    protocol: gnsi
+    service: certz
+    rpc: GetProfileList
+    pattern: unary
+    platforms: [srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: List TLS profiles over gNSI
+    description:
+      - Invokes gNSI C(Certz.GetProfileList).
+    options: {}
+    examples: |
+      - name: List TLS profiles (SR Linux)
+        nokia.openconfig.gnsi_certz_get_profile_list:
+        register: profiles
+
+  - module: gnsi_certz_can_generate_csr
+    protocol: gnsi
+    service: certz
+    rpc: CanGenerateCSR
+    pattern: unary
+    platforms: [srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: Check if the device can generate a CSR over gNSI
+    description:
+      - Invokes gNSI C(Certz.CanGenerateCSR).
+    options:
+      params:
+        description: CSR parameters as gNSI C(CSRParams) fields (protobuf JSON names).
+        type: dict
+        required: true
+        field: params
+    examples: |
+      - name: Can the device generate an ECDSA CSR? (SR Linux)
+        nokia.openconfig.gnsi_certz_can_generate_csr:
+          params:
+            csrSuite: CSRSUITE_X509_KEY_TYPE_ECDSA_PRIME256V1_SIGNATURE_ALGORITHM_SHA_2_256
+            commonName: router.example.com
+
+  - module: gnsi_certz_add_profile
+    protocol: gnsi
+    service: certz
+    rpc: AddProfile
+    pattern: unary
+    platforms: [srl]
+    validation: [unit, integration]
+    read_only: false
+    short_description: Add a TLS profile over gNSI
+    description:
+      - Invokes gNSI C(Certz.AddProfile).
+    options:
+      ssl_profile_id:
+        description: Profile ID.
+        type: str
+        required: true
+        field: sslProfileId
+    examples: |
+      - name: Add a profile (SR Linux)
+        nokia.openconfig.gnsi_certz_add_profile:
+          ssl_profile_id: telemetry
+
+  - module: gnsi_certz_delete_profile
+    protocol: gnsi
+    service: certz
+    rpc: DeleteProfile
+    pattern: unary
+    platforms: [srl]
+    validation: [unit, integration]
+    read_only: false
+    short_description: Delete a TLS profile over gNSI
+    description:
+      - Invokes gNSI C(Certz.DeleteProfile).
+    options:
+      ssl_profile_id:
+        description: Profile ID.
+        type: str
+        required: true
+        field: sslProfileId
+    examples: |
+      - name: Delete a profile (SR Linux)
+        nokia.openconfig.gnsi_certz_delete_profile:
+          ssl_profile_id: telemetry
+
+  - module: gnsi_certz_rotate
+    protocol: gnsi
+    service: certz
+    rpc: Rotate
+    stream_message: RotateCertificateRequest
+    pattern: bidi_streaming
+    platforms: [srl]
+    validation: [unit]
+    read_only: false
+    short_description: Rotate certificates of a TLS profile over gNSI
+    description:
+      - Invokes gNSI C(Certz.Rotate), sending the O(stream) messages in order and returning all server messages.
+    options: {}
+    examples: |
+      - name: Upload certificates and finalize (SR Linux)
+        nokia.openconfig.gnsi_certz_rotate:
+          stream:
+            - sslProfileId: telemetry
+              certificates:
+                entities:
+                  - version: v1
+                    createdOn: 1700000000
+                    certificateChain:
+                      certificate:
+                        type: CERTIFICATE_TYPE_X509
+                        encoding: CERTIFICATE_ENCODING_PEM
+                        rawCertificate: "{{ lookup('file', 'cert.pem') | b64encode }}"
+                        rawPrivateKey: "{{ lookup('file', 'key.pem') | b64encode }}"
+            - sslProfileId: telemetry
+              finalizeRotation: {}
+
+  # ----------------------------------------------------------------- gNSI Pathz
+
+  - module: gnsi_pathz_get
+    protocol: gnsi
+    service: pathz
+    rpc: Get
+    pattern: unary
+    platforms: [srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: Get the gNMI path authorization policy over gNSI
+    description:
+      - Invokes gNSI C(Pathz.Get).
+    options:
+      policy_instance:
+        description: Policy instance.
+        type: str
+        choices: [POLICY_INSTANCE_ACTIVE, POLICY_INSTANCE_SANDBOX]
+        default: POLICY_INSTANCE_ACTIVE
+        field: policyInstance
+    notes:
+      - The RPC fails with C(FAILED_PRECONDITION) if no Pathz policy is installed for the requested instance.
+    examples: |
+      - name: Read the active Pathz policy (SR Linux)
+        nokia.openconfig.gnsi_pathz_get:
+        register: pathz
+
+  - module: gnsi_pathz_probe
+    protocol: gnsi
+    service: pathz
+    rpc: Probe
+    pattern: unary
+    platforms: [srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: Check if a user may access a gNMI path over gNSI
+    description:
+      - Invokes gNSI C(Pathz.Probe) and returns the policy decision.
+    options:
+      user:
+        description: User name.
+        type: str
+        required: true
+        field: user
+      path:
+        description: gNMI path to check.
+        type: str
+        required: true
+        field: path
+        encode: path
+      mode:
+        description: Access mode.
+        type: str
+        choices: [MODE_READ, MODE_WRITE]
+        default: MODE_READ
+        field: mode
+      policy_instance:
+        description: Policy instance.
+        type: str
+        choices: [POLICY_INSTANCE_ACTIVE, POLICY_INSTANCE_SANDBOX]
+        default: POLICY_INSTANCE_ACTIVE
+        field: policyInstance
+    notes:
+      - The RPC fails with C(FAILED_PRECONDITION) if no Pathz policy is installed for the requested instance.
+    examples: |
+      - name: May admin write /system? (SR Linux)
+        nokia.openconfig.gnsi_pathz_probe:
+          user: admin
+          path: /system
+          mode: MODE_WRITE
+
+  - module: gnsi_pathz_rotate
+    protocol: gnsi
+    service: pathz
+    rpc: Rotate
+    stream_message: RotateRequest
+    pattern: bidi_streaming
+    platforms: [srl]
+    validation: [unit]
+    read_only: false
+    short_description: Rotate the gNMI path authorization policy over gNSI
+    description:
+      - Invokes gNSI C(Pathz.Rotate), sending the O(stream) messages in order and returning all server messages.
+    options: {}
+    examples: |
+      - name: Upload and finalize a policy (SR Linux)
+        nokia.openconfig.gnsi_pathz_rotate:
+          stream:
+            - uploadRequest:
+                version: v2
+                createdOn: 1700000000
+                policy:
+                  rules:
+                    - id: allow-admin
+                      path: {elem: [{name: system}]}
+                      user: admin
+                      mode: MODE_WRITE
+                      action: ACTION_PERMIT
+            - finalizeRotation: {}
+
+  # ----------------------------------------------------------- gNSI Credentialz
+
+  - module: gnsi_credentialz_get_public_keys
+    protocol: gnsi
+    service: credentialz
+    rpc: GetPublicKeys
+    pattern: unary
+    platforms: [srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: Get the SSH host public keys over gNSI
+    description:
+      - Invokes gNSI C(Credentialz.GetPublicKeys).
+    options: {}
+    examples: |
+      - name: Read SSH host keys (SR Linux)
+        nokia.openconfig.gnsi_credentialz_get_public_keys:
+        register: keys
+
+  - module: gnsi_credentialz_can_generate_key
+    protocol: gnsi
+    service: credentialz
+    rpc: CanGenerateKey
+    pattern: unary
+    platforms: [srl]
+    validation: [unit, integration]
+    read_only: true
+    short_description: Check if the device can generate an SSH host key over gNSI
+    description:
+      - Invokes gNSI C(Credentialz.CanGenerateKey).
+    options:
+      key_params:
+        description: Key type.
+        type: str
+        required: true
+        choices: [KEY_GEN_SSH_KEY_TYPE_RSA_2048, KEY_GEN_SSH_KEY_TYPE_ECDSA_P_256, KEY_GEN_SSH_KEY_TYPE_ECDSA_P_521, KEY_GEN_SSH_KEY_TYPE_EDDSA_ED25519]
+        field: keyParams
+    examples: |
+      - name: Can the device generate an Ed25519 host key? (SR Linux)
+        nokia.openconfig.gnsi_credentialz_can_generate_key:
+          key_params: KEY_GEN_SSH_KEY_TYPE_EDDSA_ED25519
+
+  - module: gnsi_credentialz_rotate_account_credentials
+    protocol: gnsi
+    service: credentialz
+    rpc: RotateAccountCredentials
+    stream_message: RotateAccountCredentialsRequest
+    pattern: bidi_streaming
+    platforms: [srl]
+    validation: [unit]
+    read_only: false
+    short_description: Rotate account credentials over gNSI
+    description:
+      - Invokes gNSI C(Credentialz.RotateAccountCredentials), sending the O(stream) messages in order and returning all server messages.
+    options: {}
+    examples: |
+      - name: Set authorized keys for a user and finalize (SR Linux)
+        nokia.openconfig.gnsi_credentialz_rotate_account_credentials:
+          stream:
+            - credential:
+                credentials:
+                  - account: automation
+                    version: v1
+                    createdOn: 1700000000
+                    authorizedKeys:
+                      - authorizedKey: "{{ lookup('file', 'id_ed25519.pub').split()[1] }}"
+                        keyType: KEY_TYPE_ED25519
+            - finalize: {}
+
+  - module: gnsi_credentialz_rotate_host_parameters
+    protocol: gnsi
+    service: credentialz
+    rpc: RotateHostParameters
+    stream_message: RotateHostParametersRequest
+    pattern: bidi_streaming
+    platforms: [srl]
+    validation: [unit]
+    read_only: false
+    short_description: Rotate SSH host parameters over gNSI
+    description:
+      - Invokes gNSI C(Credentialz.RotateHostParameters), sending the O(stream) messages in order and returning all server messages.
+    options: {}
+    examples: |
+      - name: Allow public-key SSH authentication only and finalize (SR Linux)
+        nokia.openconfig.gnsi_credentialz_rotate_host_parameters:
+          stream:
+            - authenticationAllowed:
+                authenticationTypes: [AUTHENTICATION_TYPE_PUBKEY]
+            - finalize: {}

@@ -16,7 +16,7 @@ from ansible.module_utils.testing import patch_module_args
 from ansible_collections.nokia.openconfig.plugins.module_utils import gnmi_module
 
 
-class FakeConnection:
+class MockConnection:
     """Stands in for the persistent connection; records every RPC."""
 
     def __init__(self):
@@ -46,9 +46,9 @@ class FakeConnection:
 
 @pytest.fixture
 def connection(monkeypatch):
-    fake = FakeConnection()
-    monkeypatch.setattr(gnmi_module, 'Connection', fake)
-    return fake
+    mock = MockConnection()
+    monkeypatch.setattr(gnmi_module, 'Connection', mock)
+    return mock
 
 
 @pytest.fixture

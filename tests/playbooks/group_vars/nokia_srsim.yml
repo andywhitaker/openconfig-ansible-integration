@@ -1,15 +1,23 @@
 ---
-# Paths used by the gNMI extension tests (depth, commit confirmed,
-# config subscription) on SR OS.
+# SR OS native YANG (nokia-conf / nokia-state) used by the platform playbooks.
 
-# Get/Subscribe target with nested configuration (interface/ipv4/primary)
+# gNMI Depth extension (Get and Subscribe)
 depth_path: /configure/router[router-name=Base]
 
-# Leaf changed by the confirmed-commit and config-subscription tests
+# gNMI Commit extension: a string leaf changed by confirmed commits
 commit_path: /configure/system/location
 
-# Config subscription: SR OS keeps state in /state, so there is no state leaf
-# below the configuration path to check for.
+# gNMI ConfigSubscription extension
 config_sub_path: /configure/system
 config_leaf: contact
+# /configure has no state leaves to filter out
 state_leaf: ''
+# SR OS rejects ConfigSubscription in Subscribe ONCE mode (STREAM only)
+config_subscription_once_supported: false
+
+# gNOI
+gnoi_network_instance: management
+gnoi_file_dir: "cf3:"
+# SR OS accepts only 555 (read-only) and 777; a read-only file cannot be
+# overwritten or removed over gNOI
+gnoi_file_permissions: 777

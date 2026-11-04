@@ -1,0 +1,67 @@
+---
+# Full configuration restore (REPLACE /) from a gnmi_set backup file. SR OS
+# rejects a REPLACE / built from its own Get output, so this runs on SR Linux.
+- name: Nokia SR Linux Restore Configuration
+  hosts: nokia_srlinux
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+    backup_dir: "{{ playbook_dir }}/../output/backup"
+    backup_file: "{{ backup_dir }}/{{ inventory_hostname }}-restore.json"
+    leaf_path: "{{ commit_path }}"
+
+  tasks:
+    - name: Ensure backup directory exists
+      ansible.builtin.file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Back up the configuration
+      nokia.openconfig.gnmi_set:
+        backup: true
+        backup_options:
+          dir_path: "{{ backup_dir }}"
+          filename: "{{ inventory_hostname }}-restore.json"
+
+    - name: Remember the original value
+      ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+    - name: Store the original value
+      ansible.builtin.set_fact:
+        original_value: "{{ leaf_value }}"
+        backup_config: "{{ lookup('ansible.builtin.file', backup_file) | from_json }}"
+
+    - name: Change the configuration after the backup
+      nokia.openconfig.gnmi_set:
+        update:
+          - path: "{{ commit_path }}"
+            value: ansible-restore
+
+    - name: Restore the configuration (replace /)
+      nokia.openconfig.gnmi_set:
+        replace:
+          - path: /
+            value: "{{ backup_config }}"
+      register: restore
+
+    - name: Check the SetResponse
+      ansible.builtin.assert:
+        that:
+          - restore is changed
+          - (restore.output | from_json).response | map(attribute='op') | list == ['REPLACE']
+
+    - name: Read the restored value
+      ansible.builtin.include_tasks: tasks/read_leaf.yml
+
+    - name: Read the configuration again
+      nokia.openconfig.gnmi_get:
+        type: config
+      register: after
+
+    - name: Check that the configuration matches the backup
+      ansible.builtin.assert:
+        that:
+          - leaf_value == original_value
+          - (after.output | from_json).keys() | sort == backup_config.keys() | sort

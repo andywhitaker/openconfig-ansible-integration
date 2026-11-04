@@ -8,6 +8,7 @@ from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
 DOCUMENTATION = """
+---
 author:
   - "Hans Thienpondt (@HansThienpondt)"
   - "Sven Wisotzky (@wisotzky)"
@@ -19,6 +20,10 @@ description:
   - Binds the gNMI service (Capabilities, Get, Set, Subscribe) as defined by
     gNMI specification 0.10.0, including the Depth, Commit (commit confirmed)
     and ConfigSubscription extensions.
+  - Binds OpenConfig gNOI services supported on Nokia SR OS and SR Linux
+    (System, File, OS, FactoryReset, Healthz, BGP and Packet Link Qualification).
+  - Binds OpenConfig gNSI services supported on Nokia SR Linux
+    (Authz, Certz, Pathz and Credentialz).
   - OpenConfig gNMI specification
     U(https://github.com/openconfig/reference/blob/master/rpc/gnmi/gnmi-specification.md)
   - Option names follow P(ansible.netcommon.grpc#connection) and the persistent
@@ -113,6 +118,21 @@ options:
       - name: ANSIBLE_GRPC_SSL_TARGET_NAME_OVERRIDE
     vars:
       - name: ansible_grpc_ssl_target_name_override
+  validate_certs:
+    type: boolean
+    description:
+      - When C(false), the server TLS certificate is trusted without a local CA
+        (certificate pinning at connect time). A secure channel is still used.
+      - Use only in lab environments. When C(true) (default), set
+        C(root_certificates_file) to your CA bundle for production.
+    default: true
+    ini:
+      - section: grpc_connection
+        key: validate_certs
+    env:
+      - name: ANSIBLE_GRPC_VALIDATE_CERTS
+    vars:
+      - name: ansible_grpc_validate_certs
   gnmi_encoding:
     description:
       - Default gNMI encoding for Get, Set and Subscribe requests, either
@@ -196,6 +216,8 @@ options:
 
 import os
 import re
+import socket
+import ssl
 import sys
 import threading
 
@@ -228,9 +250,23 @@ try:
 except Exception as exc:  # pylint: disable=broad-exception-caught
     GNMI_PB2_IMPORT_ERROR = exc
 
+GNOI_IMPORT_ERROR = None
+try:
+    from ansible_collections.nokia.openconfig.plugins.module_utils import gnoi as gnoi_util
+except Exception as exc:  # pylint: disable=broad-exception-caught
+    GNOI_IMPORT_ERROR = exc
+
+GNSI_IMPORT_ERROR = None
+try:
+    from ansible_collections.nokia.openconfig.plugins.module_utils import gnsi as gnsi_util
+except Exception as exc:  # pylint: disable=broad-exception-caught
+    GNSI_IMPORT_ERROR = exc
+
 HAS_GRPC = GRPC_IMPORT_ERROR is None
 HAS_PROTOBUF = PROTOBUF_IMPORT_ERROR is None
 HAS_GNMI_PB2 = GNMI_PB2_IMPORT_ERROR is None
+HAS_GNOI = GNOI_IMPORT_ERROR is None
+HAS_GNSI = GNSI_IMPORT_ERROR is None
 
 from ansible.errors import AnsibleConnectionFailure, AnsibleError
 from ansible.module_utils.common.text.converters import to_text
@@ -277,9 +313,27 @@ def dependency_error():
         missing = getattr(GNMI_PB2_IMPORT_ERROR, 'name', None) or ''
         if isinstance(GNMI_PB2_IMPORT_ERROR, ImportError) and missing.endswith(('_pb2', '_pb2_grpc')):
             return ("The generated gNMI protobuf modules are missing from nokia.openconfig (%s). Install a "
-                    "released collection, or run tools/build_protos.sh in a checkout." % GNMI_PB2_IMPORT_ERROR)
+                    "released collection, or run tools/build_openconfig_protos.sh in a checkout." % GNMI_PB2_IMPORT_ERROR)
         return ("The gNMI protobuf modules of nokia.openconfig cannot be imported with protobuf %s and "
                 "grpcio %s: %s" % (PROTOBUF_VERSION, grpc.__version__, GNMI_PB2_IMPORT_ERROR))
+    if not HAS_GNOI:
+        missing = getattr(GNOI_IMPORT_ERROR, 'name', None) or ''
+        if isinstance(GNOI_IMPORT_ERROR, ImportError) and missing.endswith(('_pb2', '_pb2_grpc')):
+            return ("The generated gNOI protobuf modules are missing from nokia.openconfig (%s). Run "
+                    "tools/build_openconfig_protos.sh in a checkout." % GNOI_IMPORT_ERROR)
+        return ("The gNOI modules of nokia.openconfig cannot be imported: %s" % GNOI_IMPORT_ERROR)
+    if not getattr(gnoi_util, 'HAS_GNOI_PROTOS', True):
+        return ("The generated gNOI protobuf modules are missing from nokia.openconfig. Install a "
+                "released collection, or run tools/build_openconfig_protos.sh in a source checkout.")
+    if not HAS_GNSI:
+        missing = getattr(GNSI_IMPORT_ERROR, 'name', None) or ''
+        if isinstance(GNSI_IMPORT_ERROR, ImportError) and missing.endswith(('_pb2', '_pb2_grpc')):
+            return ("The generated gNSI protobuf modules are missing from nokia.openconfig (%s). Run "
+                    "tools/build_openconfig_protos.sh in a checkout." % GNSI_IMPORT_ERROR)
+        return ("The gNSI modules of nokia.openconfig cannot be imported: %s" % GNSI_IMPORT_ERROR)
+    if not getattr(gnsi_util, 'HAS_GNSI_PROTOS', True):
+        return ("The generated gNSI protobuf modules are missing from nokia.openconfig. Install a "
+                "released collection, or run tools/build_openconfig_protos.sh in a source checkout.")
     return None
 
 
@@ -292,6 +346,23 @@ def _read_file(path, name):
             return f.read()
     except (IOError, OSError) as exc:
         raise AnsibleConnectionFailure("Failed to read %s '%s': %s" % (name, path, exc))
+
+
+def _peer_certificate_pem(host, port, server_name, timeout):
+    """Returns PEM and commonName from the TLS server without verifying the chain."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    with socket.create_connection((host, int(port)), timeout=timeout) as sock:
+        with ctx.wrap_socket(sock, server_hostname=server_name or host) as ssock:
+            pem = ssl.DER_cert_to_PEM_cert(ssock.getpeercert(True))
+            cn = None
+            for rdn in ssock.getpeercert().get('subject', ()):
+                for key, value in rdn:
+                    if key == 'commonName':
+                        cn = value
+                        break
+            return pem, cn
 
 
 class Connection(NetworkConnectionBase):
@@ -353,6 +424,25 @@ class Connection(NetworkConnectionBase):
         root = _read_file(self.get_option('root_certificates_file'), 'root_certificates_file')
         chain = _read_file(self.get_option('certificate_chain_file'), 'certificate_chain_file')
         key = _read_file(self.get_option('private_key_file'), 'private_key_file')
+        validate_certs = self.get_option('validate_certs')
+        if validate_certs is None:
+            validate_certs = True
+
+        options = _as_dict(self.get_option('grpc_channel_options'), 'grpc_channel_options')
+        override = self.get_option('ssl_target_name_override')
+
+        if not validate_certs and not root:
+            timeout = self.get_option('persistent_connect_timeout') or 5
+            try:
+                pem, cn = _peer_certificate_pem(host, port, override or host, timeout)
+            except (OSError, ssl.SSLError) as exc:
+                raise AnsibleConnectionFailure("Failed to read TLS certificate from %s:%s: %s" % (host, port, exc))
+            root = pem.encode() if isinstance(pem, str) else pem
+            self.queue_message('vvv', 'Trusting server TLS certificate for %s (validate_certs=false)' % self._target)
+            if not override and cn:
+                override = cn
+                self.queue_message('vvv', 'Using grpc.ssl_target_name_override=%s from server certificate' % cn)
+
         if root:
             certs['root_certificates'] = root
         if chain:
@@ -360,13 +450,13 @@ class Connection(NetworkConnectionBase):
         if key:
             certs['private_key'] = key
 
-        options = _as_dict(self.get_option('grpc_channel_options'), 'grpc_channel_options')
-        override = self.get_option('ssl_target_name_override')
         if override:
             options['grpc.ssl_target_name_override'] = override
         options = list(options.items()) or None
 
-        if certs:
+        if certs or not validate_certs:
+            if not certs.get('root_certificates') and not validate_certs:
+                raise AnsibleConnectionFailure("validate_certs=false could not obtain a server certificate")
             self.queue_message('vvv', 'Starting secure gRPC connection to %s' % self._target)
             creds = grpc.ssl_channel_credentials(**certs)
             self._channel = grpc.secure_channel(self._target, creds, options=options)
@@ -460,7 +550,7 @@ class Connection(NetworkConnectionBase):
     def gnmiGet(self, path=None, prefix=None, target=None, model=None, type=None,
                 encoding=None, depth=None, values_only=False):
         """
-        Executes a gNMI Get request, like 'gnmic get'.
+        Executes a gNMI Get request.
 
         Returns:
             dict: output (merged object tree, or list of values for
@@ -489,11 +579,10 @@ class Connection(NetworkConnectionBase):
                 encoding=None, commit_id=None, commit_request=False, commit_confirm=False,
                 commit_cancel=False, rollback_duration=None, dry_run=False):
         """
-        Executes a gNMI Set request, like 'gnmic set'.
+        Executes a gNMI Set request.
 
-        Confirmed commit uses the Commit extension, mapped from the gNMIc
-        flags --commit-id, --commit-request, --commit-confirm,
-        --commit-cancel and --rollback-duration.
+        Confirmed commit uses the Commit extension, built from commit_id,
+        commit_request, commit_confirm, commit_cancel and rollback_duration.
 
         Returns:
             dict: output (SetResponse) and extensions, or request if dry_run
@@ -522,7 +611,7 @@ class Connection(NetworkConnectionBase):
                       suppress_redundant=None, updates_only=None, allow_aggregation=None, qos=None,
                       encoding=None, depth=None, config_subscription=False, duration=None):
         """
-        Executes a gNMI Subscribe request, like 'gnmic subscribe'.
+        Executes a gNMI Subscribe request.
 
         ONCE returns the merged object tree. STREAM collects updates until
         duration (seconds) expires; with config_subscription and no duration
@@ -609,3 +698,200 @@ class Connection(NetworkConnectionBase):
         except gnmi.GnmiError as exc:
             raise AnsibleConnectionFailure(to_text(exc))
         return {'output': output, 'extensions': extensions}
+
+    # -------------------------------------------------------------------------
+    # gNOI
+    # -------------------------------------------------------------------------
+
+    def _gnoi_stub(self, service):
+        service = service.replace('-', '_')
+        key = 'gnoi.' + service
+        if key not in self._stubs:
+            if service not in gnoi_util.SERVICES:
+                raise AnsibleConnectionFailure("Unknown gNOI service %r" % service)
+            self._stubs[key] = gnoi_util.SERVICES[service][1](self._channel)
+        return self._stubs[key]
+
+    def _gnoi_stream_client(self, stub, rpc, iterator):
+        try:
+            if self.get_option('persistent_log_messages'):
+                self.queue_message('log', 'gNOI %s client stream started' % rpc)
+            response = getattr(stub, rpc)(iterator, metadata=self._login_credentials, timeout=self._timeout)
+            if self.get_option('persistent_log_messages'):
+                self.queue_message('log', 'gNOI %s response: %s' % (rpc, json_format.MessageToJson(response)))
+            return json_format.MessageToDict(response)
+        except grpc.RpcError as exc:
+            raise self._rpc_error(exc)
+
+    def _gnoi_stream_server(self, stub, rpc, request, save_to=None):
+        try:
+            if self.get_option('persistent_log_messages'):
+                self.queue_message('log', 'gNOI %s request: %s' % (rpc, json_format.MessageToJson(request)))
+            call = getattr(stub, rpc)(request, metadata=self._login_credentials, timeout=self._timeout)
+        except grpc.RpcError as exc:
+            raise self._rpc_error(exc)
+
+        output = []
+        digest = None
+        handle = None
+        if save_to:
+            save_to = os.path.expanduser(save_to)
+            handle = open(save_to, 'wb')
+
+        try:
+            for message in call:
+                if self.get_option('persistent_log_messages'):
+                    self.queue_message('log', 'gNOI %s stream: %s' % (rpc, json_format.MessageToJson(message)))
+                field = message.WhichOneof('response') if message.DESCRIPTOR.oneofs_by_name.get('response') else None
+                if handle is not None and field == 'contents':
+                    handle.write(message.contents)
+                if field == 'hash':
+                    digest = json_format.MessageToDict(message.hash)
+                elif 'hash' in message.DESCRIPTOR.fields_by_name and message.HasField('hash'):
+                    digest = json_format.MessageToDict(message.hash)
+                output.append(json_format.MessageToDict(message))
+        except grpc.RpcError as exc:
+            raise self._rpc_error(exc)
+        finally:
+            if handle is not None:
+                handle.close()
+
+        result = {'output': output}
+        if digest is not None:
+            result['hash'] = digest
+        if save_to is not None:
+            result['local_path'] = save_to
+        return result
+
+    def _gnoi_stream_both(self, stub, rpc, iterator):
+        try:
+            call = getattr(stub, rpc)(iterator, metadata=self._login_credentials, timeout=self._timeout)
+            output = [json_format.MessageToDict(message) for message in call]
+            return {'output': output}
+        except grpc.RpcError as exc:
+            raise self._rpc_error(exc)
+
+    @ensure_connect
+    def invokeGnoi(self, service, rpc, request=None, local_path=None, remote_path=None,
+                   permissions=None, package_filename=None, package_version=None,
+                   package_activate=False, os_version='', standby_supervisor=False, save_to=None):
+        """
+        Invokes a gNOI RPC on the target.
+
+        Streams are built and drained here, so callers pass plain values:
+        File.Put, System.SetPackage and OS.Install stream local_path in
+        chunks; File.Get and other server-streaming RPCs return every
+        response message (File.Get can also write the contents to save_to).
+
+        service:
+            system, file, os, factory_reset, healthz, bgp
+        rpc:
+            Proto RPC name (Ping, Time, Get, Put, ...)
+        request:
+            Request fields as a dict (protobuf JSON names).
+        local_path / remote_path:
+            Used by File.Put, File.Get, System.SetPackage and OS.Install.
+        save_to:
+            For File.Get, write streamed contents to this local path.
+        """
+        service = service.replace('-', '_')
+        stub = self._gnoi_stub(service)
+        key = (service, rpc)
+
+        if key == ('file', 'Put'):
+            if not local_path or not remote_path:
+                raise AnsibleConnectionFailure("gNOI File.Put requires local_path and remote_path")
+            iterator = gnoi_util.file_put_requests(remote_path, local_path, permissions=permissions)
+            return {'output': self._gnoi_stream_client(stub, rpc, iterator)}
+
+        if key == ('system', 'SetPackage'):
+            if not local_path:
+                raise AnsibleConnectionFailure("gNOI System.SetPackage requires local_path")
+            iterator = gnoi_util.set_package_requests(
+                local_path, package_name=package_filename, version=package_version, activate=package_activate)
+            return {'output': self._gnoi_stream_client(stub, rpc, iterator)}
+
+        if key == ('os', 'Install'):
+            if not local_path:
+                raise AnsibleConnectionFailure("gNOI OS.Install requires local_path")
+            iterator = gnoi_util.os_install_requests(
+                local_path, version=os_version, standby_supervisor=standby_supervisor)
+            return self._gnoi_stream_both(stub, rpc, iterator)
+
+        if key == ('file', 'Get'):
+            if not remote_path and not (request or {}).get('remoteFile'):
+                raise AnsibleConnectionFailure("gNOI File.Get requires remote_path or request.remoteFile")
+            data = dict(request or {})
+            if remote_path:
+                data['remoteFile'] = remote_path
+            message = gnoi_util.request_message(service, rpc, data)
+            return self._gnoi_stream_server(stub, rpc, message, save_to=save_to)
+
+        if key in gnoi_util.SERVER_STREAMING:
+            message = gnoi_util.request_message(service, rpc, request or {})
+            return self._gnoi_stream_server(stub, rpc, message)
+
+        message = gnoi_util.request_message(service, rpc, request or {})
+        try:
+            if self.get_option('persistent_log_messages'):
+                self.queue_message('log', 'gNOI %s request: %s' % (rpc, json_format.MessageToJson(message)))
+            response = getattr(stub, rpc)(message, metadata=self._login_credentials, timeout=self._timeout)
+        except grpc.RpcError as exc:
+            raise self._rpc_error(exc)
+        except gnoi_util.GnoiError as exc:
+            raise AnsibleConnectionFailure(to_text(exc))
+        if self.get_option('persistent_log_messages'):
+            self.queue_message('log', 'gNOI %s response: %s' % (rpc, json_format.MessageToJson(response)))
+        return {'output': json_format.MessageToDict(response)}
+
+    # -------------------------------------------------------------------------
+    # gNSI
+    # -------------------------------------------------------------------------
+
+    def _gnsi_stub(self, service):
+        service = service.replace('-', '_')
+        key = 'gnsi.' + service
+        if key not in self._stubs:
+            if service not in gnsi_util.SERVICES:
+                raise AnsibleConnectionFailure("Unknown gNSI service %r" % service)
+            self._stubs[key] = gnsi_util.SERVICES[service][1](self._channel)
+        return self._stubs[key]
+
+    @ensure_connect
+    def invokeGnsi(self, service, rpc, request=None, stream=None):
+        """
+        Invokes a gNSI RPC (Authz, Certz, Pathz, Credentialz).
+
+        request:
+            Unary request fields (protobuf JSON names).
+        stream:
+            Request messages (protobuf JSON dicts) of a Rotate* RPC, sent in
+            order. All server messages are collected until the RPC ends; the
+            client sequence cannot depend on intermediate responses.
+        """
+        service = service.replace('-', '_')
+        stub = self._gnsi_stub(service)
+        key = (service, rpc)
+
+        if stream is not None:
+            iterator = gnsi_util.stream_messages(service, rpc, stream)
+            if key in gnsi_util.BIDI_STREAMING:
+                return self._gnoi_stream_both(stub, rpc, iterator)
+            try:
+                response = getattr(stub, rpc)(iterator, metadata=self._login_credentials, timeout=self._timeout)
+            except grpc.RpcError as exc:
+                raise self._rpc_error(exc)
+            return {'output': json_format.MessageToDict(response)}
+
+        message = gnsi_util.request_message(service, rpc, request or {})
+        try:
+            if self.get_option('persistent_log_messages'):
+                self.queue_message('log', 'gNSI %s request: %s' % (rpc, json_format.MessageToJson(message)))
+            response = getattr(stub, rpc)(message, metadata=self._login_credentials, timeout=self._timeout)
+        except grpc.RpcError as exc:
+            raise self._rpc_error(exc)
+        except gnsi_util.GnsiError as exc:
+            raise AnsibleConnectionFailure(to_text(exc))
+        if self.get_option('persistent_log_messages'):
+            self.queue_message('log', 'gNSI %s response: %s' % (rpc, json_format.MessageToJson(response)))
+        return {'output': json_format.MessageToDict(response)}

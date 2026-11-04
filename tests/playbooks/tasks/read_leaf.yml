@@ -1,6 +1,8 @@
 ---
-# Reads the configuration value at `leaf_path` into `leaf_value`
-# ('' if the leaf is not configured).
+# Reads the configuration value at `leaf_path` into `leaf_value` ('' when the
+# leaf is not configured). The caller sets `leaf_path` from its model family:
+# the platform group_vars for native YANG, vars/model_oc.yml for OpenConfig.
+# Boolean leaves from values_only Get are normalized to true/false.
 
 - name: Read {{ leaf_path }}
   nokia.openconfig.gnmi_get:
@@ -13,3 +15,8 @@
 - name: Store the value
   ansible.builtin.set_fact:
     leaf_value: "{{ (leaf_read.output | from_json) | first | default('') }}"
+
+- name: Normalize boolean leaf values
+  ansible.builtin.set_fact:
+    leaf_value: "{{ leaf_value | bool }}"
+  when: leaf_value is boolean

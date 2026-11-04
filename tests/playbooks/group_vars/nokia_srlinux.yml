@@ -1,14 +1,20 @@
 ---
-# Paths used by the gNMI extension tests (depth, commit confirmed,
-# config subscription) on SR Linux.
+# SR Linux native YANG (srl_nokia-*) used by the platform playbooks.
 
-# Get/Subscribe target with nested configuration (subinterface/ipv4)
+# gNMI Depth extension (Get and Subscribe)
 depth_path: /interface[name=ethernet-1/1]
 
-# Leaf changed by the confirmed-commit and config-subscription tests
+# gNMI Commit extension: a string leaf changed by confirmed commits
 commit_path: /system/information/location
 
-# Config subscription: a container with config and state leaves
+# gNMI ConfigSubscription extension
 config_sub_path: /system/information
 config_leaf: contact
+# Operational leaf that a config-only subscription must not return
 state_leaf: current-datetime
+
+# gNOI
+gnoi_network_instance: mgmt
+gnoi_file_dir: /tmp
+gnoi_file_permissions: 644
+gnoi_healthz_path: /platform/control[slot=A]

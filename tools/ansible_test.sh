@@ -28,8 +28,8 @@ if ! command -v ansible-test >/dev/null; then
 fi
 
 if [[ ! -f "$ROOT/plugins/module_utils/proto/gnmi_pb2.py" ]]; then
-  echo "Generated protobuf modules missing, running tools/build_protos.sh" >&2
-  "$ROOT/tools/build_protos.sh"
+  echo "Generated protobuf modules missing, running tools/build_openconfig_protos.sh" >&2
+  "$ROOT/tools/build_openconfig_protos.sh"
 fi
 
 case "$ROOT" in
@@ -41,7 +41,7 @@ case "$ROOT" in
     COLLECTION="$STAGE/ansible_collections/nokia/openconfig"
     mkdir -p "$COLLECTION"
     rsync -a --delete \
-      --exclude .git --exclude .venv --exclude dist --exclude tests/output \
+      --exclude .git --exclude .venv --exclude .tmp --exclude dist --exclude tests/output \
       --exclude '__pycache__' --exclude '*.tar.gz' \
       --exclude 'tests/clab-*' --exclude tests/license.txt \
       "$ROOT/" "$COLLECTION/"

@@ -2,65 +2,123 @@
 
 ---
 
-# Ansible Collection – `nokia.openconfig`
+# Nokia OpenConfig Ansible Collection
 
-This [collection](https://galaxy.ansible.com/nokia/openconfig) for Ansible by RedHat provides connection plugins and modules to interact with devices that support OpenConfig gRPC API services.
+[![CI](https://github.com/nokia-steward/openconfig-ansible-integration/actions/workflows/ci.yml/badge.svg)](https://github.com/nokia-steward/openconfig-ansible-integration/actions/workflows/ci.yml)
+[![Documentation](https://img.shields.io/badge/docs-MkDocs-blue)](https://nokia-steward.github.io/openconfig-ansible-integration/)
+[![License](https://img.shields.io/badge/license-BSD%203--Clause-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
+[![Ansible](https://img.shields.io/badge/ansible--core-2.20%2B-blue)](https://docs.ansible.com/)
 
-## Status of this project
-This collection implements the gRPC Network Management Interface (gNMI) service, version 0.10.0. The gRPC PROTO interface definition is available from [GitHub](https://github.com/openconfig/gnmi/blob/v0.14.1/proto/gnmi/gnmi.proto). The gNMI specification can be found [here](https://github.com/openconfig/reference/blob/master/rpc/gnmi/gnmi-specification.md). The gNMI extensions Depth, Commit (confirmed commit) and ConfigSubscription are supported.
+Ansible collection **`nokia.openconfig`** for devices that expose **OpenConfig gRPC** services: **gNMI** 0.10.0, **gNOI**, and **gNSI**, validated on Nokia **SR OS** and **SR Linux**.
 
-Please be aware, that the gRPC connection plugin establishes a dedicated, persistent gRPC session. Therefore transport, connectivity and API service are all collapsed into the connection plugin without the need to have a loader for any sort of vendor specific sub-plugins.
+---
 
-Even this project is supposed to be agnostic to vendors and device families, this collection has only been validated against Nokia SR OS and SRLinux nodes running 25.7 release.
+## Requirements
 
-As of today, the gNMI modules of this collection only support JSON_IETF (preferred) and JSON encoding. The implementation will run a Capability request during session setup, to determine the list of encodings supported by the networking device (acting as gNMI server). The encoding auto-discovery can be disabled, by setting the required encoding in the playbook, host file or using an environment variable.
+- **Ansible Core** 2.20 or newer  
+- **Python** 3.12 or newer on the controller  
+- **Python libraries**: [grpcio](https://pypi.org/project/grpcio/) ≥ 1.59.0, [protobuf](https://pypi.org/project/protobuf/) ≥ 3.20.3 (5.29+ on Python 3.14), [PyYAML](https://pypi.org/project/PyYAML/) ≥ 6.0
+- **Router**: gRPC server enabled with gNMI, gNOI and gNSI as needed
+
+---
 
 ## Installation
-Distribution is via [ansible-galaxy](https://galaxy.ansible.com/).
-To install this collection, please use the following command:
+
 ```bash
+pip install 'ansible-core>=2.20' 'grpcio>=1.59.0,<2' 'protobuf>=5.29.0,<8' 'PyYAML>=6.0'
 ansible-galaxy collection install nokia.openconfig
 ```
 
-If you have already installed a previous version, you can upgrade to the latest version of this collection, by adding the `--force-with-deps` option:
+`ansible-galaxy` does not install Python libraries; install them into the same Python environment as Ansible, preferably a virtual environment. Pre-release versions are only installed with `--pre` or an explicit version.
+
+Building from a git checkout also requires generated protobuf modules:
+
 ```bash
-ansible-galaxy collection install nokia.openconfig --force-with-deps
+pip install -r requirements-dev.txt
+tools/build_openconfig_protos.sh
+ansible-galaxy collection install . --force
 ```
 
-Pre-releases, like 2.0.0-beta.1, are only installed if the version is given explicitly:
-```bash
-ansible-galaxy collection install 'nokia.openconfig:==2.0.0-beta.1'
+---
+
+## Quick example
+
+```yaml
+- name: gNMI get
+  hosts: srlinux
+  gather_facts: false
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+    ansible_port: 57400
+    ansible_root_certificates_file: ./ca.pem
+  tasks:
+    - name: Get the system name
+      nokia.openconfig.gnmi_get:
+        path: [/system/name/host-name]
+        type: config
+      register: cfg
 ```
 
-The connection plugin requires the Python packages `grpcio` and `protobuf` on the Ansible controller, installed into the same Python environment as Ansible (for example the pipx or virtualenv of `ansible-core`). The collection ships the list as `requirements.txt`, which is also used by `ansible-builder` for execution environments:
+Set **`ansible_connection: nokia.openconfig.grpc`**. Module options are the request fields of the gNMI, gNOI and gNSI specifications in snake_case.
+
+---
+
+## Documentation
+
+Full user documentation is published with **MkDocs** on GitHub Pages:
+
+**https://nokia-steward.github.io/openconfig-ansible-integration/**
+
+| Section | Description |
+| --- | --- |
+| [Installation](https://nokia-steward.github.io/openconfig-ansible-integration/getting-started/installation/) | Python dependencies, Galaxy, GitHub release, source build |
+| [Quick Start](https://nokia-steward.github.io/openconfig-ansible-integration/getting-started/quick-start/) | Router gRPC setup, inventory and first gNMI tasks |
+| [User Guide](https://nokia-steward.github.io/openconfig-ansible-integration/guides/user-guide/) | gNMI extensions, gNOI/gNSI, backup & diff |
+| [Security Guide](https://nokia-steward.github.io/openconfig-ansible-integration/guides/security-guide/) | TLS, credentials, gNSI |
+| [Reference](https://nokia-steward.github.io/openconfig-ansible-integration/reference/) | Modules and connection (from docstrings) |
+| [Examples](https://nokia-steward.github.io/openconfig-ansible-integration/examples/) | `tests/playbooks/` integration suite |
+
+Build docs locally:
+
 ```bash
-pip install 'grpcio>=1.59.0' 'protobuf>=3.20.3'
+make install-dev
+make docs
+make docs-serve   # http://127.0.0.1:8000
 ```
 
-On Python 3.14, `protobuf` must be 5.29.0 or newer. If a dependency is missing or too old, the connection fails with a message that names the problem and the `pip` command to fix it.
+---
 
-## Usage
-To use the gNMI modules from this collection, please make sure to set `ansible_connection` variable to `nokia.openconfig.grpc`. Due to the nature of gNMI being vendor agnostic, the `network_os` does not have any impact to the function of this module.
+## Features
 
-Connection options follow the naming of `ansible.netcommon.grpc`, for example `ansible_root_certificates_file`. The module names and parameters follow the [gNMIc](https://gnmic.openconfig.net) commands and flags, for example `gnmic get --path /system --type config --depth 1` translates into the `nokia.openconfig.gnmi_get` parameters `path`, `type` and `depth`.
+- **gNMI 0.10.0** — Get, Set, Subscribe, Capabilities; Depth, Commit, ConfigSubscription extensions  
+- **gNOI** — System, File, OS, FactoryReset, Healthz, BGP  
+- **gNSI** — Authz, Certz, Pathz, Credentialz  
+- **Persistent gRPC** — One connection plugin; no vendor-specific loader  
+- **Specification-aligned** modules — One module per RPC, options named after the request fields  
+- **Backup / check mode / diff** on `gnmi_set` — Ansible-native operational patterns  
 
-Release 2.0.0 removed the connection name `nokia.openconfig.gnmi`, the module name `gnmi_config` and the 1.0.0 option and parameter names. Please check the [CHANGELOG](CHANGELOG.md) for the replacements.
+See [Supported specifications](https://nokia-steward.github.io/openconfig-ansible-integration/#supported-specifications) for the versions of the specifications and services.
 
-## Requirements
-* Ansible Core 2.20 (or newer)
-* Python 3.12 (or newer)
-* grpcio 1.59.0 (or newer)
-* protobuf 3.20.3 (or newer), 5.29.0 (or newer) on Python 3.14
+---
 
-## Supported vendors
-Tested with Nokia SR OS and SRLinux
+## Modules (overview)
 
-## Playbooks
+**gNMI:** `gnmi_capabilities`, `gnmi_get`, `gnmi_set`, `gnmi_subscribe`  
 
-Please check examples contained in the `tests/playbooks` folder as part of the CI/CD test automation.
+**gNOI** and **gNSI:** one module per RPC that Nokia SR OS or SR Linux supports, named `gnoi_<service>_<rpc>` and `gnsi_<service>_<rpc>`, for example `gnoi_system_ping`, `gnoi_file_put`, `gnoi_healthz_get`, `gnsi_certz_get_profile_list`, `gnsi_authz_rotate`.  
 
-## Modules
-* gnmi_capabilities
-* gnmi_get
-* gnmi_set
-* gnmi_subscribe
+Details: [module reference](https://nokia-steward.github.io/openconfig-ansible-integration/reference/).
+
+---
+
+## Support
+
+- [Documentation site](https://nokia-steward.github.io/openconfig-ansible-integration/)  
+- [Issues](https://github.com/nokia-steward/openconfig-ansible-integration/issues)  
+- [Changelog](CHANGELOG.md)  
+- [Contributing](CONTRIBUTING.md)  
+
+---
+
+**Version:** 2.0.0 · **License:** BSD 3-Clause

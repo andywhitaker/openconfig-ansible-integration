@@ -1,0 +1,117 @@
+---
+# gNSI on SR Linux (gNSI enabled on the mgmt grpc-server). Read-only RPCs plus
+# a Certz profile round trip; Rotate RPCs are not run against the lab.
+- name: gNSI SR Linux
+  hosts: nokia_srlinux
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+    ssl_profile_id: ansible-gnsi-test
+    # Pathz answers FAILED_PRECONDITION while no Pathz policy is installed
+    pathz_inactive: FAILED_PRECONDITION
+
+  tasks:
+    - name: Certz GetProfileList
+      nokia.openconfig.gnsi_certz_get_profile_list:
+      register: profiles
+
+    - name: Certz CanGenerateCSR
+      nokia.openconfig.gnsi_certz_can_generate_csr:
+        params:
+          commonName: ansible.example.com
+      register: csr
+
+    - name: Check the Certz responses
+      ansible.builtin.assert:
+        that:
+          - profiles is not changed
+          - (profiles.output | from_json).sslProfileIds | default([]) is sequence
+          - csr is not changed
+          - (csr.output | from_json) is mapping
+
+    - name: Certz profile round trip
+      block:
+        - name: Certz AddProfile
+          nokia.openconfig.gnsi_certz_add_profile:
+            ssl_profile_id: "{{ ssl_profile_id }}"
+          register: added
+
+        - name: Certz GetProfileList after AddProfile
+          nokia.openconfig.gnsi_certz_get_profile_list:
+          register: with_profile
+
+        - name: Check the profile was added
+          ansible.builtin.assert:
+            that:
+              - added is changed
+              - ssl_profile_id in (with_profile.output | from_json).sslProfileIds
+
+      always:
+        - name: Certz DeleteProfile
+          nokia.openconfig.gnsi_certz_delete_profile:
+            ssl_profile_id: "{{ ssl_profile_id }}"
+          register: deleted
+
+    - name: Certz GetProfileList after DeleteProfile
+      nokia.openconfig.gnsi_certz_get_profile_list:
+      register: without_profile
+
+    - name: Check the profile was deleted
+      ansible.builtin.assert:
+        that:
+          - deleted is changed
+          - ssl_profile_id not in (without_profile.output | from_json).sslProfileIds | default([])
+
+    - name: Authz Get
+      nokia.openconfig.gnsi_authz_get:
+      register: authz
+
+    - name: Authz Probe
+      nokia.openconfig.gnsi_authz_probe:
+        user: "{{ ansible_user }}"
+        rpc: /gnmi.gNMI/Get
+      register: authz_probe
+
+    - name: Check the Authz responses
+      ansible.builtin.assert:
+        that:
+          - authz is not changed
+          - authz_probe is not changed
+          - (authz_probe.output | from_json).action in ['ACTION_PERMIT', 'ACTION_DENY']
+
+    - name: Pathz Get
+      nokia.openconfig.gnsi_pathz_get:
+      register: pathz
+      failed_when: pathz.failed | default(false) and pathz.msg is not search(pathz_inactive)
+
+    - name: Pathz Probe
+      nokia.openconfig.gnsi_pathz_probe:
+        user: "{{ ansible_user }}"
+        path: /system/information
+      register: pathz_probe
+      failed_when: pathz_probe.failed | default(false) and pathz_probe.msg is not search(pathz_inactive)
+
+    - name: Check the Pathz responses
+      ansible.builtin.assert:
+        that:
+          - pathz is not changed
+          - pathz_probe is not changed
+          - pathz.output is defined or pathz.msg is search(pathz_inactive)
+          - pathz_probe.output is defined or pathz_probe.msg is search(pathz_inactive)
+
+    - name: Credentialz GetPublicKeys
+      nokia.openconfig.gnsi_credentialz_get_public_keys:
+      register: public_keys
+
+    - name: Credentialz CanGenerateKey
+      nokia.openconfig.gnsi_credentialz_can_generate_key:
+        key_params: KEY_GEN_SSH_KEY_TYPE_EDDSA_ED25519
+      register: can_generate
+
+    - name: Check the Credentialz responses
+      ansible.builtin.assert:
+        that:
+          - public_keys is not changed
+          - can_generate is not changed
+          - (can_generate.output | from_json) is mapping

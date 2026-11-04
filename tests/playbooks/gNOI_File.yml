@@ -1,0 +1,78 @@
+---
+# gNOI File round trip in gnoi_file_dir (platform group_vars): Put, Stat,
+# Get, Remove.
+- name: gNOI File
+  hosts: all
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+    work_dir: "{{ playbook_dir }}/../output/gnoi"
+    local_file: "{{ work_dir }}/{{ inventory_hostname }}-put.txt"
+    fetched_file: "{{ work_dir }}/{{ inventory_hostname }}-get.txt"
+    remote_file: "{{ gnoi_file_dir }}/ansible-gnoi-file.txt"
+    content: "nokia.openconfig gNOI File test for {{ inventory_hostname }}\n"
+
+  tasks:
+    - name: Ensure the local work directory exists
+      ansible.builtin.file:
+        path: "{{ work_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create the local test file
+      ansible.builtin.copy:
+        dest: "{{ local_file }}"
+        content: "{{ content }}"
+        mode: "0644"
+
+    - name: File round trip
+      block:
+        - name: Upload the file
+          nokia.openconfig.gnoi_file_put:
+            local_path: "{{ local_file }}"
+            remote_path: "{{ remote_file }}"
+            permissions: "{{ gnoi_file_permissions }}"
+          register: put
+
+        - name: Stat the uploaded file
+          nokia.openconfig.gnoi_file_stat:
+            remote_path: "{{ remote_file }}"
+          register: stat
+
+        - name: Download the file
+          nokia.openconfig.gnoi_file_get:
+            remote_path: "{{ remote_file }}"
+            local_path: "{{ fetched_file }}"
+          register: get
+
+        - name: Check the round trip
+          vars:
+            stats: "{{ (stat.output | from_json).stats }}"
+          ansible.builtin.assert:
+            that:
+              - put is changed
+              - stat is not changed
+              - stats | length == 1
+              - stats[0].size | int == content | length
+              - get.local_path == fetched_file
+              - lookup('ansible.builtin.file', fetched_file, rstrip=false) == content
+
+      always:
+        - name: Remove the uploaded file
+          nokia.openconfig.gnoi_file_remove:
+            remote_path: "{{ remote_file }}"
+          register: remove
+          failed_when: false
+
+    - name: Stat the removed file
+      nokia.openconfig.gnoi_file_stat:
+        remote_path: "{{ remote_file }}"
+      register: gone
+      failed_when: gone is succeeded
+
+    - name: Check the remove
+      ansible.builtin.assert:
+        that:
+          - remove is changed
+          - gone.msg is search('NOT_FOUND')

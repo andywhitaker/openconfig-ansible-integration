@@ -16,9 +16,8 @@ author:
   - "Sven Wisotzky (@wisotzky)"
 short_description: Get gNMI server capabilities
 description:
-  - Sends a gNMI C(CapabilityRequest), like C(gnmic capabilities), and
-    returns the gNMI version, supported encodings and supported models of the
-    device.
+  - Sends a gNMI C(CapabilityRequest) and returns the gNMI version, supported
+    encodings and supported models of the device.
 version_added: 1.0.0
 options: {}
 notes:
@@ -30,14 +29,21 @@ requirements:
 """
 
 EXAMPLES = """
-# gnmic capabilities
 - name: Get gNMI capabilities
   nokia.openconfig.gnmi_capabilities:
   register: caps
 
-- name: Require gNMI 0.10.0 or later
+- name: Require JSON_IETF and the native configuration model (SR OS)
   ansible.builtin.assert:
-    that: caps.gnmi_version is version('0.10.0', '>=')
+    that:
+      - "'JSON_IETF' in caps.encodings"
+      - caps.models | selectattr('name', 'equalto', 'nokia-conf') | list | length > 0
+
+- name: Require gNMI 0.10.0 and the native system model (SR Linux)
+  ansible.builtin.assert:
+    that:
+      - caps.gnmi_version is version('0.10.0', '>=')
+      - caps.models | selectattr('name', 'search', ':srl_nokia-system$') | list | length > 0
 """
 
 RETURN = """

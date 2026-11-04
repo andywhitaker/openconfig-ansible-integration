@@ -1,0 +1,31 @@
+---
+# gNOI Healthz on SR Linux (SR OS does not implement Healthz). Paths are
+# native SR Linux component paths (gnoi_healthz_path in group_vars).
+- name: gNOI Healthz SR Linux
+  hosts: nokia_srlinux
+  gather_facts: false
+
+  vars:
+    ansible_connection: nokia.openconfig.grpc
+
+  tasks:
+    - name: List the health events of the component
+      nokia.openconfig.gnoi_healthz_list:
+        path: "{{ gnoi_healthz_path }}"
+      register: health_list
+
+    - name: Get the latest health status of the component
+      nokia.openconfig.gnoi_healthz_get:
+        path: "{{ gnoi_healthz_path }}"
+      register: health
+
+    - name: Check the health status
+      vars:
+        component: "{{ (health.output | from_json).component }}"
+      ansible.builtin.assert:
+        that:
+          - health_list is not changed
+          - health is not changed
+          - (health_list.output | from_json).statuses | length > 0
+          - component.id is defined
+          - component.path.elem | map(attribute='name') | list == ['platform', 'control']

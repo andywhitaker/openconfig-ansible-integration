@@ -16,10 +16,10 @@ author:
   - "Sven Wisotzky (@wisotzky)"
 short_description: Retrieve configuration and state using gNMI Subscribe
 description:
-  - Sends a gNMI C(SubscribeRequest), like C(gnmic subscribe), and collects
-    the responses.
-  - Option names follow the gNMIc flags in snake_case, and the values follow
-    the gNMI 0.10.0 protobuf messages. Enum values are case-insensitive.
+  - Sends a gNMI C(SubscribeRequest) and collects the responses.
+  - Option names are the C(SubscriptionList) and C(Subscription) fields in
+    snake_case, and the values follow the gNMI 0.10.0 protobuf messages. Enum
+    values are case-insensitive.
   - C(ONCE) returns the merged object tree, like M(nokia.openconfig.gnmi_get).
   - C(STREAM) collects notifications until O(duration) expires. C(POLL) sends
     one Poll after the initial synchronization and returns both rounds.
@@ -27,7 +27,7 @@ version_added: 1.0.0
 options:
   path:
     description:
-      - Paths to subscribe to, gNMIc C(--path). Every path uses the same
+      - Paths to subscribe to, C(Subscription.path). Every path uses the same
         O(stream_mode), O(sample_interval), O(heartbeat_interval) and
         O(suppress_redundant).
       - Mutually exclusive with O(subscription).
@@ -36,8 +36,8 @@ options:
     version_added: 2.0.0
   subscription:
     description:
-      - Subscriptions with individual settings, as in a gNMIc subscription
-        file. Each entry has C(path) and optionally C(stream_mode),
+      - Subscriptions with individual settings, C(SubscriptionList.subscription).
+        Each entry has C(path) and optionally C(stream_mode),
         C(sample_interval), C(heartbeat_interval) and C(suppress_redundant),
         with the same meaning as the top-level options.
       - The 1.0.0 keys C(mode), C(sampleInterval), C(heartbeatInterval) and
@@ -47,59 +47,58 @@ options:
     elements: dict
   prefix:
     description:
-      - Common prefix for all paths, gNMIc C(--prefix) and
-        C(SubscriptionList.prefix).
+      - Common prefix for all paths, C(SubscriptionList.prefix).
     type: str
     default: ''
   target:
     description:
-      - Target name set on the prefix, gNMIc C(--target).
+      - Target name set on the prefix, C(Path.target).
     type: str
     version_added: 2.0.0
   model:
     description:
-      - Restricts the subscription to a model by name, gNMIc C(--model) and
+      - Restricts the subscription to a model by name,
         C(SubscriptionList.use_models).
     type: str
     version_added: 2.0.0
   mode:
     description:
-      - Subscription mode, gNMIc C(--mode) and C(SubscriptionList.mode).
+      - Subscription mode, C(SubscriptionList.mode).
       - One of C(STREAM), C(ONCE), C(POLL).
-      - The default changed from C(ONCE) to C(STREAM) in 2.0.0, matching
-        gNMIc.
+      - The default changed from C(ONCE) to C(STREAM) in 2.0.0, matching the
+        default of the gNMI specification.
     type: str
     default: STREAM
   stream_mode:
     description:
-      - Mode of each subscription if O(mode=STREAM), gNMIc C(--stream-mode)
-        and C(Subscription.mode).
+      - Mode of each subscription if O(mode=STREAM), C(Subscription.mode).
       - One of C(SAMPLE), C(ON_CHANGE), C(TARGET_DEFINED). Defaults to
         C(SAMPLE).
     type: str
     version_added: 2.0.0
   sample_interval:
     description:
-      - Sample interval as Go duration, for example C(10s), gNMIc
-        C(--sample-interval) and C(Subscription.sample_interval).
+      - Sample interval as Go duration, for example C(10s),
+        C(Subscription.sample_interval).
       - Omitted or C(0s) lets the target choose.
     type: str
     version_added: 2.0.0
   heartbeat_interval:
     description:
-      - Heartbeat interval as Go duration, gNMIc C(--heartbeat-interval) and
+      - Heartbeat interval as Go duration,
         C(Subscription.heartbeat_interval).
     type: str
     version_added: 2.0.0
   suppress_redundant:
     description:
-      - Suppress updates of unchanged values, gNMIc C(--suppress-redundant).
+      - Suppress updates of unchanged values,
+        C(Subscription.suppress_redundant).
     type: bool
     version_added: 2.0.0
   updates_only:
     description:
       - Do not send the initial state, only changes after the
-        synchronization, gNMIc C(--updates-only).
+        synchronization, C(SubscriptionList.updates_only).
     type: bool
   allow_aggregation:
     description:
@@ -108,25 +107,25 @@ options:
     type: bool
   qos:
     description:
-      - DSCP marking of the subscription, gNMIc C(--qos).
+      - DSCP marking of the subscription, C(SubscriptionList.qos).
     type: int
   encoding:
     description:
-      - Overrides the encoding of the connection, gNMIc C(--encoding). Either
-        C(JSON) or C(JSON_IETF).
+      - Overrides the encoding of the connection, C(SubscriptionList.encoding).
+        Either C(JSON) or C(JSON_IETF).
     type: str
     version_added: 2.0.0
   depth:
     description:
       - Limits the depth of the returned subtrees using the gNMI Depth
-        extension, gNMIc C(--depth). C(0) means no limit.
+        extension, C(Depth.level). C(0) means no limit.
     type: int
     version_added: 2.0.0
   config_subscription:
     description:
       - Subscribe to configuration nodes only, using the gNMI
-        ConfigSubscription extension (C(ConfigSubscriptionStart)). gNMIc has no
-        flag for this extension.
+        ConfigSubscription extension (C(ConfigSubscriptionStart)).
+      - SR OS supports the extension with O(mode=STREAM) only.
       - The target reports each commit with a C(sync_done) extension, returned
         in RV(extensions) with C(commit_confirm_id), C(server_commit_id) and
         C(done).
@@ -138,8 +137,8 @@ options:
     version_added: 2.0.0
   duration:
     description:
-      - Time in seconds to collect responses. gNMIc streams until it is
-        interrupted, a task cannot.
+      - Time in seconds to collect responses. A task cannot keep a
+        subscription open, so a C(STREAM) subscription always ends.
       - For C(STREAM) the subscription is closed when it expires. For C(ONCE)
         and C(POLL) it is a timeout.
       - Defaults to C(20), except for O(config_subscription) in C(STREAM)
@@ -148,37 +147,69 @@ options:
     type: int
 notes:
   - Requires the P(nokia.openconfig.grpc#connection) connection.
-  - Check mode is supported. The module never changes the device.
+  - Check mode is supported. The task is skipped and no Subscribe RPC is
+    sent (use M(nokia.openconfig.gnmi_get) for read-only checks).
+  - The Subscribe RPC is a bidirectional stream. The connection sends the
+    C(SubscribeRequest), and in C(POLL) mode one C(Poll) after the initial
+    synchronization, then reads responses until the subscription completes.
+  - C(ONCE) completes with the C(sync_response) of the target, C(POLL) with
+    the second C(sync_response). If O(duration) expires first, the task
+    fails.
+  - C(STREAM) is closed by the client when O(duration) expires, and the task
+    returns the notifications received until then. With O(config_subscription)
+    and no O(duration), the task returns as soon as the target reports a
+    C(sync_done) with C(done=true) after the initial synchronization.
 requirements:
   - grpcio
   - protobuf
 """
 
 EXAMPLES = """
-# gnmic subscribe --path /configure --mode once
-- name: Get configuration using Subscribe ONCE
+- name: Get the system configuration using Subscribe ONCE (SR OS)
   nokia.openconfig.gnmi_subscribe:
     mode: once
     path:
-      - /configure
+      - /configure/system
 
-# gnmic subscribe --prefix /state --path ... --stream-mode sample --sample-interval 1s
-- name: Collect port statistics for 5 seconds
+- name: Get the system information using Subscribe ONCE (SR Linux)
+  nokia.openconfig.gnmi_subscribe:
+    mode: once
+    path:
+      - /system/information
+
+- name: Collect management port statistics for 5 seconds (SR OS)
   nokia.openconfig.gnmi_subscribe:
     prefix: /state
     path:
-      - /port[port-id=1/1/c1/1]/ethernet/statistics
-      - /port[port-id=1/1/c2/1]/ethernet/statistics
+      - /port[port-id=A/1]/statistics
     stream_mode: sample
     sample_interval: 1s
     duration: 5
 
-- name: Wait for the next configuration commit
+- name: Collect management interface statistics for 5 seconds (SR Linux)
+  nokia.openconfig.gnmi_subscribe:
+    path:
+      - /interface[name=mgmt0]/statistics
+    stream_mode: sample
+    sample_interval: 1s
+    duration: 5
+
+- name: Collect configuration changes for 60 seconds (SR OS)
+  nokia.openconfig.gnmi_subscribe:
+    path:
+      - /configure/system
+    stream_mode: on_change
+    config_subscription: true
+    duration: 60
+  register: commits
+
+- name: Collect configuration changes for 60 seconds (SR Linux)
   nokia.openconfig.gnmi_subscribe:
     path:
       - /interface[name=ethernet-1/1]
     stream_mode: on_change
     config_subscription: true
+    duration: 60
   register: commits
 """
 
@@ -280,6 +311,9 @@ def main():
         module.fail_json(msg="depth must be zero or positive")
     if params['duration'] is not None and params['duration'] <= 0:
         module.fail_json(msg="duration must be positive")
+
+    if module.check_mode:
+        module.exit_json(changed=False, skipped=True, msg='check mode')
 
     response = Rpc(module)('gnmiSubscribe', **params)
     module.exit_json(changed=False, output=to_json(response['output']), extensions=response['extensions'])

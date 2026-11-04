@@ -10,4 +10,12 @@ license.*
 .DS_Store
 plugins/module_utils/proto/*_pb2.py
 plugins/module_utils/proto/*_pb2_grpc.py
+plugins/module_utils/proto/gnoi/*_pb2.py
+plugins/module_utils/proto/gnoi/*_pb2_grpc.py
+plugins/module_utils/proto/gnoi/google/rpc/*_pb2.py
+plugins/module_utils/proto/gnoi/google/rpc/*_pb2_grpc.py
+plugins/module_utils/proto/gnsi/*_pb2.py
+plugins/module_utils/proto/gnsi/*_pb2_grpc.py
+.tmp/
 tests/output/
+site/

@@ -7,7 +7,7 @@ This guide explains how to set up your development environment, run tests, and c
 
 ## Overview
 
-The `nokia.openconfig` collection provides network automation support for devices with OpenConfig gRPC services, today **gNMI**, tested with Nokia **SR OS** and **SR Linux**.
+The `nokia.openconfig` collection provides network automation support for devices with OpenConfig gRPC services: **gNMI**, **gNOI** and **gNSI**, tested with Nokia **SR OS** and **SR Linux**.
 Developers can use the included `run.sh` helper script to simplify local development, containerlab deployment, and regression testing.
 
 ---
@@ -46,12 +46,16 @@ git clone https://github.com/nokia-steward/openconfig-ansible-integration.git
 cd openconfig-ansible-integration
 pip install -r requirements-dev.txt
 
-tools/build_protos.sh
+tools/build_openconfig_protos.sh
 
 ansible-galaxy collection install . --force
 ```
 
-`tools/build_protos.sh` compiles the gNMI protos in `plugins/module_utils/proto` and rewrites the generated imports. Run it again whenever a `.proto` file changes. It uses [uv](https://docs.astral.sh/uv/) (part of `requirements-dev.txt`) to run a pinned, old protoc (grpcio-tools 1.47.5 on Python 3.10), so the generated code stays compatible with old and new protobuf releases. Do not regenerate with a newer grpcio-tools.
+`tools/build_openconfig_protos.sh` compiles the gNMI, gNOI and gNSI protos in `plugins/module_utils/proto` and rewrites the generated imports. Refresh `.proto` sources from upstream with `tools/sync_openconfig_protos.sh` (gNMI, gNOI, and gNSI in one script). Run `build_openconfig_protos.sh` again whenever a `.proto` file changes. It uses [uv](https://docs.astral.sh/uv/) (part of `requirements-dev.txt`) to run a pinned, old protoc (grpcio-tools 1.47.5 on Python 3.10), so the generated code stays compatible with old and new protobuf releases. Do not regenerate with a newer grpcio-tools.
+
+Connection unit tests use **`OpenConfigMockServer`** in `tests/unit/plugins/connection/openconfig_mock_server.py` — one in-process mock for gNMI, gNOI, and gNSI. See `test_openconfig_grpc.py`.
+
+User documentation is built with **MkDocs** (`make docs`); the site is published to GitHub Pages from the `main` branch. Edit guides under `docs/`; module reference pages are generated from docstrings via `tools/generate_docs.py`.
 
 ### 4. Install runtime dependencies
 

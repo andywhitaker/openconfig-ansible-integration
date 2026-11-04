@@ -1,6 +1,6 @@
 namespace: nokia
 name: openconfig
-version: 2.0.0-beta.1
+version: 2.0.0-beta.5
 readme: README.md
 authors:
 - Hans Thienpondt (@HansThienpondt)
@@ -11,13 +11,15 @@ tags:
 - ansible
 - grpc
 - gnmi
+- gnoi
+- gnsi
 - networking
 - yang
 - openconfig
 
 repository: https://github.com/nokia-steward/openconfig-ansible-integration
-documentation: https://github.com/nokia-steward/openconfig-ansible-integration#readme
-homepage: https://github.com/nokia-steward/openconfig-ansible-integration
+documentation: https://nokia-steward.github.io/openconfig-ansible-integration/
+homepage: https://nokia-steward.github.io/openconfig-ansible-integration/
 issues: https://github.com/nokia-steward/openconfig-ansible-integration/issues
 
 build_ignore:
