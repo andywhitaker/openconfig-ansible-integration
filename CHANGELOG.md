@@ -4,7 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - Unreleased
+## [2.0.1]
+
+Shorter gNMI paths with a dedicated origin, workflow playbooks shipped with the collection, and documentation organized by task. Existing playbooks keep working unchanged.
+
+### Added
+- `origin` option on `gnmi_get`, `gnmi_set` and `gnmi_subscribe`. It applies to every path that does not name its own origin, so OpenConfig paths can be written as `/system/config/hostname` with `origin: openconfig`. It is placed on the prefix when the request has one, otherwise on each path. `gnmi_set` also uses it for the backup and for the reads behind `changed` and `diff`.
+- Connection option `gnmi_origin` (ini `grpc_connection`, env `ANSIBLE_GNMI_ORIGIN`, var `ansible_gnmi_origin`): default origin per host. `origin: ""` on a task sends paths without origin.
+- Filter `nokia.openconfig.strip_yang_prefixes`: removes YANG module prefixes from member names of response data, so the same expressions work for `JSON` and `JSON_IETF` and across platforms.
+- Action group `nokia.openconfig.gnmi` (`gnmi_get`, `gnmi_set`, `gnmi_subscribe`) for `module_defaults`.
+- Workflow playbooks under `playbooks/`, run as `nokia.openconfig.<name>`: `safe_config_change`, `config_snapshot`, `lldp_neighbors`, `interface_health`, `reachability_check`, `os_upgrade` and `device_inventory`. `playbooks/examples/` contains an inventory with group variables for Nokia SR Linux, Nokia SR OS, Cisco IOS XE, Cisco IOS XR and a generic gNMI router.
+- Documentation: Start Here, Inventory Patterns, Platform Notes and gRPC Architecture, TLS modes in the Security Guide, and the shipped playbooks in Examples.
+- CI checks the syntax of the shipped playbooks, run by name.
+
+### Changed
+- When a path has an origin, from the path itself or from `origin`, module-qualified element names are sent unchanged, for example `rfc7951:/Cisco-IOS-XE-native:native/hostname`. Paths without any origin behave as in 2.0.0: a prefix in the first element, as in `/openconfig-lldp:lldp`, becomes the origin.
+- The connection reference documents `grpc.max_receive_message_length` for responses larger than 4 MB.
+- The gNOI and gNSI support matrix in the User Guide moved to Platform Notes and the module reference.
+
+## [2.0.0]
 
 Module options follow the request fields of the gNMI, gNOI and gNSI specifications, the connection follows `ansible.netcommon.grpc`, and gNOI and gNSI are supported with one module per RPC. This is a breaking release: the 1.0.0 connection, module, option and parameter names were removed. See "Removed" below for the replacements.
 

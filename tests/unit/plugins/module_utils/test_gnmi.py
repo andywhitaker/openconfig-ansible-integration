@@ -80,6 +80,73 @@ def test_encode_path_origin_forms():
     assert legacy['elem'][0]['name'] == 'interfaces'
 
 
+def test_encode_path_explicit_origin_keeps_qualified_names():
+    path = gnmi.encode_path('rfc7951:/Cisco-IOS-XE-native:native/hostname')
+    assert path['origin'] == 'rfc7951'
+    assert [e['name'] for e in path['elem']] == ['Cisco-IOS-XE-native:native', 'hostname']
+
+
+def test_encode_path_origin_argument():
+    path = gnmi.encode_path('/Cisco-IOS-XE-native:native/hostname', origin='rfc7951')
+    assert path['origin'] == 'rfc7951'
+    assert path['elem'][0]['name'] == 'Cisco-IOS-XE-native:native'
+    assert gnmi.encode_path('openconfig:/system', origin='rfc7951')['origin'] == 'openconfig'
+
+
+def test_encode_path_qualified_without_origin():
+    path = gnmi.encode_path('/oc:interfaces', qualified=True)
+    assert 'origin' not in path
+    assert path['elem'][0]['name'] == 'oc:interfaces'
+
+
+def test_build_get_request_origin_on_paths():
+    request = gnmi.build_get_request(path=['/system', 'rfc7951:/native', ''], origin='openconfig')
+    assert 'prefix' not in request
+    assert [p.get('origin') for p in request['path']] == ['openconfig', 'rfc7951', 'openconfig']
+
+
+def test_build_get_request_origin_on_prefix():
+    request = gnmi.build_get_request(path=['config/hostname', 'state'], prefix='/system', origin='openconfig')
+    assert request['prefix']['origin'] == 'openconfig'
+    assert all('origin' not in p for p in request['path'])
+
+
+def test_build_get_request_target_only_prefix_puts_origin_on_paths():
+    request = gnmi.build_get_request(path=['/system'], target='dut', origin='openconfig')
+    assert request['prefix'] == {'target': 'dut'}
+    assert request['path'][0]['origin'] == 'openconfig'
+
+
+def test_build_get_request_prefix_origin_wins():
+    request = gnmi.build_get_request(path=['Cisco-IOS-XE-native:native'], prefix='rfc7951:/', origin='openconfig')
+    assert request['prefix'] == {'origin': 'rfc7951'}
+    assert request['path'][0] == {'elem': [{'name': 'Cisco-IOS-XE-native:native'}]}
+    request = gnmi.build_get_request(path=['hostname'], prefix='rfc7951:/Cisco-IOS-XE-native:native',
+                                     origin='openconfig')
+    assert request['prefix']['origin'] == 'rfc7951'
+    assert request['prefix']['elem'][0]['name'] == 'Cisco-IOS-XE-native:native'
+    assert 'origin' not in request['path'][0]
+
+
+def test_build_set_request_origin():
+    request = gnmi.build_set_request(update=[{'path': '/lldp/config/enabled', 'value': True}],
+                                     replace=[{'path': 'rfc7951:/x', 'value': 1}],
+                                     delete=['/system/config/motd-banner'], origin='openconfig')
+    assert request['update'][0]['path']['origin'] == 'openconfig'
+    assert request['replace'][0]['path']['origin'] == 'rfc7951'
+    assert request['delete'][0]['origin'] == 'openconfig'
+
+
+def test_build_subscription_list_origin():
+    request = gnmi.build_subscription_list(subscription=[{'path': '/a'}, {'path': 'native:/b'}], origin='openconfig')
+    assert [s['path']['origin'] for s in request['subscription']] == ['openconfig', 'native']
+
+
+def test_build_requests_without_origin_are_unchanged():
+    assert gnmi.build_get_request(path=['/oc:interfaces'])['path'][0]['origin'] == 'oc'
+    assert 'origin' not in gnmi.build_set_request(delete=['/a'])['delete'][0]
+
+
 @pytest.mark.parametrize('path', ['', '/'])
 def test_encode_root(path):
     assert gnmi.encode_path(path) == {}

@@ -170,6 +170,26 @@ def test_get_with_depth_and_type(server):
     assert result['extensions'] == [{'depth': {'level': 1}}]
 
 
+def test_get_origin_option_and_connection_default(server):
+    conn = make_connection(server.port, gnmi_origin='openconfig')
+    conn.gnmiGet(path=['/interface'])
+    assert server.gnmi.requests[-1].path[0].origin == 'openconfig'
+    conn.gnmiGet(path=['/Cisco-IOS-XE-native:native/hostname'], origin='rfc7951')
+    request = server.gnmi.requests[-1]
+    assert request.path[0].origin == 'rfc7951'
+    assert request.path[0].elem[0].name == 'Cisco-IOS-XE-native:native'
+    conn.gnmiGet(path=['/interface'], origin='')
+    assert server.gnmi.requests[-1].path[0].origin == ''
+
+
+def test_set_and_subscribe_origin(server):
+    conn = make_connection(server.port)
+    conn.gnmiSet(update=[{'path': '/system/name', 'value': {'host-name': 'r1'}}], origin='openconfig')
+    assert server.gnmi.requests[-1].update[0].path.origin == 'openconfig'
+    conn.gnmiSubscribe(path=['/interface'], mode='ONCE', origin='openconfig')
+    assert server.gnmi.requests[-1].subscribe.subscription[0].path.origin == 'openconfig'
+
+
 def test_get_depth_zero_sends_no_extension(server):
     conn = make_connection(server.port)
     conn.gnmiGet(path=['/interface'], depth=0)

@@ -1,0 +1,99 @@
+---
+# Saves the configuration of every router and reports drift against the
+# previous snapshot.
+#
+# Each run writes <snapshot_dir>/<host>/<timestamp>.json and updates
+# <snapshot_dir>/<host>/latest.json. Run with --diff to see what changed.
+# Keep the directory in git to get a history of every router.
+#
+# Variables:
+#   snapshot_dir      default ./snapshots
+#   snapshot_paths    paths to save (default ["/"], the whole configuration)
+#   origin            origin of the paths, for example openconfig
+#   keep              number of timestamped snapshots to keep per router (default 10)
+#   fail_on_drift     fail the router when its configuration changed (default false)
+#   target            host pattern (default all)
+#
+#   ansible-playbook -i inventory.yml nokia.openconfig.config_snapshot --diff
+- name: Configuration snapshot and drift detection
+  hosts: "{{ target | default('all') }}"
+  gather_facts: false
+
+  vars:
+    snapshot_dir: "{{ lookup('ansible.builtin.env', 'PWD') }}/snapshots"
+    snapshot_paths:
+      - /
+    keep: 10
+    fail_on_drift: false
+    host_dir: "{{ snapshot_dir }}/{{ inventory_hostname }}"
+
+  tasks:
+    - name: Read the configuration
+      nokia.openconfig.gnmi_get:
+        path: "{{ snapshot_paths }}"
+        origin: "{{ origin | default(omit) }}"
+        type: config
+      register: config
+
+    - name: Save the snapshot on the controller
+      delegate_to: localhost
+      vars:
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+        snapshot_content: "{{ config.output | from_json | to_nice_json(sort_keys=true) }}\n"
+      block:
+        - name: Create the snapshot directory
+          ansible.builtin.file:
+            path: "{{ host_dir }}"
+            state: directory
+            mode: "0750"
+
+        - name: Check for a previous snapshot
+          ansible.builtin.stat:
+            path: "{{ host_dir }}/latest.json"
+          register: previous
+
+        - name: Write the timestamped snapshot
+          ansible.builtin.copy:
+            content: "{{ snapshot_content }}"
+            dest: "{{ host_dir }}/{{ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}.json"
+            mode: "0640"
+          diff: false
+
+        - name: Compare with the previous snapshot
+          ansible.builtin.copy:
+            content: "{{ snapshot_content }}"
+            dest: "{{ host_dir }}/latest.json"
+            mode: "0640"
+          register: latest
+
+        - name: List the timestamped snapshots
+          ansible.builtin.find:
+            paths: "{{ host_dir }}"
+            patterns: "*T*Z.json"
+          register: snapshots
+
+        - name: Remove snapshots beyond the retention
+          ansible.builtin.file:
+            path: "{{ item.path }}"
+            state: absent
+          loop: "{{ (snapshots.files | sort(attribute='path', reverse=true))[keep | int:] }}"
+          loop_control:
+            label: "{{ item.path | basename }}"
+
+    - name: Record drift
+      ansible.builtin.set_fact:
+        drift: "{{ previous.stat.exists and latest is changed }}"
+
+    - name: Report drift
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}:
+          {{ 'first snapshot' if not previous.stat.exists
+             else ('configuration changed since the previous snapshot' if drift else 'no change') }}
+      changed_when: drift | bool
+
+    - name: Fail on drift
+      ansible.builtin.fail:
+        msg: "The configuration of {{ inventory_hostname }} changed, see {{ host_dir }}"
+      when: fail_on_drift | bool and drift | bool

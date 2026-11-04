@@ -23,6 +23,7 @@
 | Parameter | Type | Comments |
 | --- | --- | --- |
 | prefix {#param-prefix} | str | Common prefix for all paths, `SetRequest.prefix`. |
+| origin {#param-origin} | str | Origin of the paths, `Path.origin`, for example `openconfig` or `rfc7951`. Set on [`prefix`](#param-prefix) if given, otherwise on each path that does not name its own origin.<br/>With an origin, element names keep their YANG module prefix, for example `/Cisco-IOS-XE-native:native/hostname` with `rfc7951`.<br/>Also used for the gNMI Get requests of [`backup`](#param-backup) and `changed`.<br/>Defaults to the `gnmi_origin` option of the connection. An empty string sends the paths without origin. |
 | target {#param-target} | str | Target name set on the prefix, `Path.target`. |
 | update {#param-update} | list | Paths and values to merge, `SetRequest.update`. |
 | replace {#param-replace} | list | Paths and values to replace, `SetRequest.replace`. |
@@ -63,6 +64,15 @@
     replace:
       - path: /interface[name=ethernet-1/1]/description
         value: uplink to spine1
+
+- name: Enable LLDP and set the hostname using OpenConfig
+  nokia.openconfig.gnmi_set:
+    origin: openconfig
+    update:
+      - path: /lldp/config/enabled
+        value: true
+      - path: /system/config/hostname
+        value: leaf1
 
 - name: Apply a request file
   nokia.openconfig.gnmi_set:

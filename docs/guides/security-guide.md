@@ -15,6 +15,17 @@ When **`ansible_grpc_validate_certs`** is **`false`**, the connection fetches th
 
 Without a CA bundle, a client certificate or `ansible_grpc_validate_certs: false`, the connection uses a plain-text channel. Use this only for routers that expose an insecure gRPC server for troubleshooting.
 
+### TLS modes
+
+| Mode | Variables | Router authenticated | Equivalent in gNMIc |
+| --- | --- | --- | --- |
+| Verify against a CA (production) | `ansible_root_certificates_file` | yes | `--tls-ca` |
+| Mutual TLS | CA plus `ansible_certificate_chain_file` and `ansible_private_key_file` | yes, and the router authenticates Ansible | `--tls-ca --tls-cert --tls-key` |
+| Trust the presented certificate (lab) | `ansible_grpc_validate_certs: false` | no, but the channel is encrypted | `--skip-verify` |
+| Plain text (troubleshooting) | none of the above | no, and the channel is not encrypted | `--insecure` |
+
+A CA bundle takes precedence over `ansible_grpc_validate_certs: false`. With `false` and no `ansible_grpc_ssl_target_name_override`, the common name of the presented certificate is used as the name to verify, so routers whose certificate does not name their address still connect.
+
 ### Mutual TLS
 
 When the router authenticates clients by certificate, add the client certificate chain and key:
@@ -25,6 +36,8 @@ ansible_private_key_file: /path/to/client.key
 ```
 
 Proxy variables can be cleared for gRPC via **`ansible_grpc_environment`** (see connection documentation).
+
+See [Inventory Patterns](../getting-started/inventory-patterns.md) for TLS settings per platform.
 
 ## Credentials
 

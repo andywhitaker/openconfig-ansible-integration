@@ -27,6 +27,7 @@
 | --- | --- | --- |
 | path {#param-path} | list | Paths to subscribe to, `Subscription.path`. Every path uses the same [`stream_mode`](#param-stream-mode), [`sample_interval`](#param-sample-interval), [`heartbeat_interval`](#param-heartbeat-interval) and [`suppress_redundant`](#param-suppress-redundant).<br/>Mutually exclusive with [`subscription`](#param-subscription). |
 | subscription {#param-subscription} | list | Subscriptions with individual settings, `SubscriptionList.subscription`. Each entry has `path` and optionally `stream_mode`, `sample_interval`, `heartbeat_interval` and `suppress_redundant`, with the same meaning as the top-level options.<br/>The 1.0.0 keys `mode`, `sampleInterval`, `heartbeatInterval` and `suppressRedundant` were removed in 2.0.0.<br/>Mutually exclusive with [`path`](#param-path). |
+| origin {#param-origin} | str | Origin of the paths, `Path.origin`, for example `openconfig` or `rfc7951`. Set on [`prefix`](#param-prefix) if given, otherwise on each path that does not name its own origin.<br/>With an origin, element names keep their YANG module prefix.<br/>Defaults to the `gnmi_origin` option of the connection. An empty string sends the paths without origin. |
 | prefix {#param-prefix} | str | Common prefix for all paths, `SubscriptionList.prefix`.<br/>**Default:** `''` |
 | target {#param-target} | str | Target name set on the prefix, `Path.target`. |
 | model {#param-model} | str | Restricts the subscription to a model by name, `SubscriptionList.use_models`. |
@@ -74,6 +75,15 @@
     stream_mode: sample
     sample_interval: 1s
     duration: 5
+
+- name: Sample OpenConfig interface counters every 10 seconds for 30 seconds
+  nokia.openconfig.gnmi_subscribe:
+    origin: openconfig
+    path:
+      - /interfaces/interface/state/counters
+    stream_mode: sample
+    sample_interval: 10s
+    duration: 30
 
 - name: Collect configuration changes for 60 seconds (SR OS)
   nokia.openconfig.gnmi_subscribe:

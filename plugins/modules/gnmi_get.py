@@ -29,12 +29,23 @@ options:
       - Paths to retrieve, C(GetRequest.path).
       - gNMI path strings with list keys, for example
         C(/interface[name=ethernet-1/1]/description).
-      - The origin is given as prefix, for example
-        C(openconfig:/interfaces/interface).
+      - A path can name its origin, for example
+        C(openconfig:/interfaces/interface). Otherwise O(origin) applies.
       - If omitted, the root path is retrieved.
     type: list
     elements: str
     default: ['']
+  origin:
+    description:
+      - Origin of the paths, C(Path.origin), for example C(openconfig) or
+        C(rfc7951). Set on O(prefix) if given, otherwise on each path that
+        does not name its own origin.
+      - With an origin, element names keep their YANG module prefix, for
+        example C(/Cisco-IOS-XE-native:native/hostname) with C(rfc7951).
+      - Defaults to the C(gnmi_origin) option of the connection. An empty
+        string sends the paths without origin.
+    type: str
+    version_added: 2.0.1
   prefix:
     description:
       - Common prefix for all paths, C(GetRequest.prefix).
@@ -124,6 +135,21 @@ EXAMPLES = """
     path:
       - openconfig:/interfaces/interface[name=ethernet-1/1]/state/oper-status
     values_only: true
+
+- name: Get several OpenConfig paths with one origin
+  nokia.openconfig.gnmi_get:
+    origin: openconfig
+    path:
+      - /system/config/hostname
+      - /interfaces/interface[name=ethernet-1/1]/state/oper-status
+
+# Module-qualified first element, as used by Cisco IOS XE native models
+- name: Get the hostname from a native YANG model with RFC 7951 paths
+  nokia.openconfig.gnmi_get:
+    origin: rfc7951
+    path:
+      - /Cisco-IOS-XE-native:native/hostname
+    type: config
 """
 
 RETURN = """
@@ -155,6 +181,7 @@ from ansible_collections.nokia.openconfig.plugins.module_utils.gnmi_module impor
 def main():
     argument_spec = dict(
         path=dict(type='list', elements='str', default=['']),
+        origin=dict(type='str'),
         prefix=dict(type='str', default=''),
         target=dict(type='str'),
         model=dict(type='str'),

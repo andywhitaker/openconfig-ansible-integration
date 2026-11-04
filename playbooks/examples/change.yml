@@ -1,0 +1,19 @@
+---
+# Example change for nokia.openconfig.safe_config_change, using OpenConfig:
+#
+#   ansible-playbook -i inventory.yml nokia.openconfig.safe_config_change \
+#     -e @change.yml -e target=nokia_srlinux
+origin: openconfig
+use_confirmed_commit: false
+approve: true
+changes:
+  update:
+    - path: /lldp/config/enabled
+      value: true
+    - path: /system/config/login-banner
+      value: Managed by Ansible
+verify:
+  - path: /lldp/config/enabled
+    value: true
+  - path: /system/config/login-banner
+    value: Managed by Ansible

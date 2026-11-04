@@ -153,6 +153,7 @@ ansible-playbook -i inventory.yml quickstart.yml --ask-vault-pass
 If the connection fails, check reachability of the gRPC port, the TLS settings from step 2 and the user access from step 1. Run with `-vvv` to see the connection messages. Standalone clients such as [gNMIc](https://gnmic.openconfig.net) and [gNOIc](https://gnoic.kmrd.dev) are useful to check the router side independently from Ansible.
 
 !!! note "Further reading"
-    - [User Guide](../guides/user-guide.md) — Set, Subscribe, backup and restore, confirmed commit, gNOI and gNSI.
+    - [Inventory Patterns](inventory-patterns.md) — group variables for SR OS, SR Linux and other gNMI routers.
+    - [User Guide](../guides/user-guide.md) — Set, Subscribe, origins, backup and restore, confirmed commit, gNOI and gNSI.
     - [Security Guide](../guides/security-guide.md) — TLS, mutual TLS and credentials.
-    - [Examples](../examples.md) — integration playbooks of the repository.
+    - [Examples](../examples.md) — workflow playbooks shipped with the collection and integration playbooks of the repository.

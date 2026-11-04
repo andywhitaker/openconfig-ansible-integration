@@ -146,12 +146,31 @@ options:
       - name: ANSIBLE_GNMI_ENCODING
     vars:
       - name: ansible_gnmi_encoding
+  gnmi_origin:
+    description:
+      - Default origin of the gNMI paths of M(nokia.openconfig.gnmi_get),
+        M(nokia.openconfig.gnmi_set) and M(nokia.openconfig.gnmi_subscribe),
+        for example C(openconfig) or C(rfc7951).
+      - Used when the task does not set the C(origin) option. Paths that name
+        their origin, as in C(openconfig:/system), keep it.
+      - Not set by default, so paths are sent without origin.
+    version_added: 2.0.1
+    ini:
+      - section: grpc_connection
+        key: gnmi_origin
+    env:
+      - name: ANSIBLE_GNMI_ORIGIN
+    vars:
+      - name: ansible_gnmi_origin
   grpc_channel_options:
     description:
       - Key/value pairs (dict) of gRPC channel options.
       - gRPC reference
         U(https://grpc.github.io/grpc/core/group__grpc__arg__keys.html)
       - A string is parsed as YAML/JSON, so the value can be set in ansible.cfg.
+      - For responses larger than the gRPC default of 4 MB, set
+        C(grpc.max_receive_message_length) to the limit in bytes, for example
+        C(67108864) for 64 MB.
     ini:
       - section: grpc_connection
         key: grpc_channel_options
@@ -533,6 +552,13 @@ class Connection(NetworkConnectionBase):
     def _extensions(*items):
         return [item for item in items if item]
 
+    def _origin(self, origin):
+        """The origin of the task, or the gnmi_origin of the connection. An
+        empty string sends paths without origin."""
+        if origin is None:
+            return self.get_option('gnmi_origin') or None
+        return origin or None
+
     # -------------------------------------------------------------------------
 
     @ensure_connect
@@ -548,7 +574,7 @@ class Connection(NetworkConnectionBase):
 
     @ensure_connect
     def gnmiGet(self, path=None, prefix=None, target=None, model=None, type=None,
-                encoding=None, depth=None, values_only=False):
+                encoding=None, depth=None, values_only=False, origin=None):
         """
         Executes a gNMI Get request.
 
@@ -558,7 +584,8 @@ class Connection(NetworkConnectionBase):
         """
         try:
             data = gnmi.build_get_request(path=path, prefix=prefix, target=target, model=model,
-                                          type=type, encoding=encoding or self._encoding)
+                                          type=type, encoding=encoding or self._encoding,
+                                          origin=self._origin(origin))
             data['extension'] = self._extensions(gnmi_ext.depth(depth))
         except gnmi.GnmiError as exc:
             raise AnsibleConnectionFailure(to_text(exc))
@@ -577,7 +604,7 @@ class Connection(NetworkConnectionBase):
     @ensure_connect
     def gnmiSet(self, prefix=None, target=None, update=None, replace=None, delete=None,
                 encoding=None, commit_id=None, commit_request=False, commit_confirm=False,
-                commit_cancel=False, rollback_duration=None, dry_run=False):
+                commit_cancel=False, rollback_duration=None, dry_run=False, origin=None):
         """
         Executes a gNMI Set request.
 
@@ -589,7 +616,8 @@ class Connection(NetworkConnectionBase):
         """
         try:
             data = gnmi.build_set_request(prefix=prefix, target=target, update=update, replace=replace,
-                                          delete=delete, encoding=encoding or self._encoding)
+                                          delete=delete, encoding=encoding or self._encoding,
+                                          origin=self._origin(origin))
             data['extension'] = self._extensions(gnmi_ext.commit_extension(
                 commit_id, commit_request, commit_confirm, commit_cancel, rollback_duration))
         except gnmi.GnmiError as exc:
@@ -609,7 +637,7 @@ class Connection(NetworkConnectionBase):
     def gnmiSubscribe(self, path=None, subscription=None, prefix=None, target=None, model=None,
                       mode='STREAM', stream_mode=None, sample_interval=None, heartbeat_interval=None,
                       suppress_redundant=None, updates_only=None, allow_aggregation=None, qos=None,
-                      encoding=None, depth=None, config_subscription=False, duration=None):
+                      encoding=None, depth=None, config_subscription=False, duration=None, origin=None):
         """
         Executes a gNMI Subscribe request.
 
@@ -630,7 +658,7 @@ class Connection(NetworkConnectionBase):
                     mode=mode, stream_mode=stream_mode, sample_interval=sample_interval,
                     heartbeat_interval=heartbeat_interval, suppress_redundant=suppress_redundant,
                     updates_only=updates_only, allow_aggregation=allow_aggregation, qos=qos,
-                    encoding=encoding or self._encoding),
+                    encoding=encoding or self._encoding, origin=self._origin(origin)),
                 'extension': self._extensions(
                     gnmi_ext.depth(depth),
                     gnmi_ext.config_subscription_start() if config_subscription else None),

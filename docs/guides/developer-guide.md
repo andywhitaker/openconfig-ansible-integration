@@ -15,6 +15,8 @@ Contributors extend **`nokia.openconfig`** in the Git repository [openconfig-ans
 | `tools/sync_openconfig_protos.sh` | Refresh protos from OpenConfig upstream |
 | `tools/build_openconfig_protos.sh` | Generate `*_pb2.py` (pinned protoc) |
 | `tests/unit/` | Module and connection unit tests |
+| `plugins/filter/` | `strip_yang_prefixes` filter |
+| `playbooks/` | Workflow playbooks shipped with the collection, run as `nokia.openconfig.<name>` |
 | `tests/playbooks/` | Integration categories via `tests/run.sh` |
 | `tests/unit/plugins/connection/openconfig_mock_server.py` | In-process gNxI mock server for unit tests |
 
@@ -61,6 +63,8 @@ Generated modules call `run()` from `gnoi_module` / `gnsi_module`, which delegat
 `tests/unit/plugins/test_grpc_manifest.py` fails when generated modules are out of date, when the connection's service or streaming tables differ from the manifest, or when the mock server implements more or fewer RPCs than the manifest lists.
 
 ## Connection plugin internals
+
+[gRPC Architecture](grpc-architecture.md) gives the overview and explains why the protocol logic lives in the connection plugin rather than in an `ansible.netcommon.grpc` sub-plugin.
 
 Modules call the persistent connection through `Rpc(module)(method, **kwargs)` (`plugins/module_utils/gnmi_module.py`):
 

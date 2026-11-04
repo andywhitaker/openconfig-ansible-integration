@@ -46,13 +46,13 @@ pip install 'ansible-core>=2.20' 'grpcio>=1.59.0,<2' 'protobuf>=5.29.0,<8' 'PyYA
 ansible-galaxy collection install nokia.openconfig --upgrade
 ```
 
-Pre-release versions are only installed when requested, either with `--pre` or with an explicit version such as `nokia.openconfig:==2.0.0`.
+Pre-release versions are only installed when requested, either with `--pre` or with an explicit version such as `nokia.openconfig:==2.0.1`.
 ///
 /// tab | GitHub Release
 Each [GitHub release](https://github.com/nokia-steward/openconfig-ansible-integration/releases) has the collection tarball attached, the same artifact that is published on Galaxy:
 
 ```bash
-VERSION=2.0.0
+VERSION=2.0.1
 curl -LO https://github.com/nokia-steward/openconfig-ansible-integration/releases/download/${VERSION}/nokia-openconfig-${VERSION}.tar.gz
 ansible-galaxy collection install nokia-openconfig-${VERSION}.tar.gz --force
 ```
@@ -112,4 +112,4 @@ ansible-doc nokia.openconfig.gnmi_get
 ```
 
 !!! success "Installation complete"
-    Continue with the [Quick Start](quick-start.md) to prepare the router and run a first gNMI Get.
+    Continue with the [Quick Start](quick-start.md) to prepare the router and run a first gNMI Get. The shipped playbooks are listed with `ls ~/.ansible/collections/ansible_collections/nokia/openconfig/playbooks`, see [Examples](../examples.md#shipped-playbooks).

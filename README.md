@@ -72,12 +72,16 @@ Full user documentation is published with **MkDocs** on GitHub Pages:
 
 | Section | Description |
 | --- | --- |
+| [Start Here](https://nokia-steward.github.io/openconfig-ansible-integration/getting-started/start-here/) | Which module or playbook to use for a task |
 | [Installation](https://nokia-steward.github.io/openconfig-ansible-integration/getting-started/installation/) | Python dependencies, Galaxy, GitHub release, source build |
 | [Quick Start](https://nokia-steward.github.io/openconfig-ansible-integration/getting-started/quick-start/) | Router gRPC setup, inventory and first gNMI tasks |
-| [User Guide](https://nokia-steward.github.io/openconfig-ansible-integration/guides/user-guide/) | gNMI extensions, gNOI/gNSI, backup & diff |
-| [Security Guide](https://nokia-steward.github.io/openconfig-ansible-integration/guides/security-guide/) | TLS, credentials, gNSI |
+| [Inventory Patterns](https://nokia-steward.github.io/openconfig-ansible-integration/getting-started/inventory-patterns/) | Group variables for SR OS, SR Linux and other gNMI routers |
+| [User Guide](https://nokia-steward.github.io/openconfig-ansible-integration/guides/user-guide/) | Origins, gNMI extensions, gNOI/gNSI, backup & diff |
+| [Platform Notes](https://nokia-steward.github.io/openconfig-ansible-integration/guides/platform-notes/) | Origins, encodings and limits per platform |
+| [Security Guide](https://nokia-steward.github.io/openconfig-ansible-integration/guides/security-guide/) | TLS modes, credentials, gNSI |
+| [gRPC Architecture](https://nokia-steward.github.io/openconfig-ansible-integration/guides/grpc-architecture/) | How the connection works, relation to `ansible.netcommon.grpc` |
 | [Reference](https://nokia-steward.github.io/openconfig-ansible-integration/reference/) | Modules and connection (from docstrings) |
-| [Examples](https://nokia-steward.github.io/openconfig-ansible-integration/examples/) | `tests/playbooks/` integration suite |
+| [Examples](https://nokia-steward.github.io/openconfig-ansible-integration/examples/) | Shipped workflow playbooks and the `tests/playbooks/` integration suite |
 
 Build docs locally:
 
@@ -97,6 +101,9 @@ make docs-serve   # http://127.0.0.1:8000
 - **Persistent gRPC** — One connection plugin; no vendor-specific loader  
 - **Specification-aligned** modules — One module per RPC, options named after the request fields  
 - **Backup / check mode / diff** on `gnmi_set` — Ansible-native operational patterns  
+- **Origin option** on the gNMI modules and per host (`ansible_gnmi_origin`) — short paths for OpenConfig and native models  
+- **Workflow playbooks** — safe configuration change, snapshot and drift detection, LLDP and interface reports, reachability, OS upgrade, device inventory  
+- **Multi-vendor gNMI** — validated on SR OS and SR Linux; other OpenConfig routers are configured through inventory variables  
 
 See [Supported specifications](https://nokia-steward.github.io/openconfig-ansible-integration/#supported-specifications) for the versions of the specifications and services.
 
@@ -107,6 +114,8 @@ See [Supported specifications](https://nokia-steward.github.io/openconfig-ansibl
 **gNMI:** `gnmi_capabilities`, `gnmi_get`, `gnmi_set`, `gnmi_subscribe`  
 
 **gNOI** and **gNSI:** one module per RPC that Nokia SR OS or SR Linux supports, named `gnoi_<service>_<rpc>` and `gnsi_<service>_<rpc>`, for example `gnoi_system_ping`, `gnoi_file_put`, `gnoi_healthz_get`, `gnsi_certz_get_profile_list`, `gnsi_authz_rotate`.  
+
+**Playbooks:** run with `ansible-playbook -i inventory.yml nokia.openconfig.<name>`, for example `nokia.openconfig.safe_config_change` or `nokia.openconfig.config_snapshot`. See [playbooks/README.md](playbooks/README.md).
 
 Details: [module reference](https://nokia-steward.github.io/openconfig-ansible-integration/reference/).
 
@@ -121,4 +130,4 @@ Details: [module reference](https://nokia-steward.github.io/openconfig-ansible-i
 
 ---
 
-**Version:** 2.0.0 · **License:** BSD 3-Clause
+**Version:** 2.0.1 · **License:** BSD 3-Clause

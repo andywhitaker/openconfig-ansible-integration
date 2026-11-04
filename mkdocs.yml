@@ -45,12 +45,16 @@ theme:
 nav:
 - Home: index.md
 - Getting Started:
+  - Start Here: getting-started/start-here.md
   - Installation: getting-started/installation.md
   - Quick Start: getting-started/quick-start.md
+  - Inventory Patterns: getting-started/inventory-patterns.md
 - Guides:
   - Overview: guides/index.md
   - User Guide: guides/user-guide.md
+  - Platform Notes: guides/platform-notes.md
   - Security Guide: guides/security-guide.md
+  - gRPC Architecture: guides/grpc-architecture.md
   - Developer Guide: guides/developer-guide.md
   - Community Guide: guides/community-guide.md
 - Examples: examples.md
@@ -126,7 +130,7 @@ markdown_extensions:
 - pymdownx.tasklist:
     custom_checkbox: true
 extra:
-  version: 2.0.0
+  version: 2.0.1
   social:
   - icon: fontawesome/brands/github
     link: https://github.com/nokia-steward/openconfig-ansible-integration

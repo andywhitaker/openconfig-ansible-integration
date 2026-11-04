@@ -1,10 +1,75 @@
 # Examples
 
+The collection ships workflow playbooks for everyday operations. The repository also contains the integration test suite, whose playbooks show each module in use.
+
+## Shipped playbooks
+
+The playbooks in [`playbooks/`](https://github.com/nokia-steward/openconfig-ansible-integration/tree/main/playbooks) are installed with the collection. Run them by name from any directory, with your own inventory:
+
+```bash
+ansible-playbook -i inventory.yml nokia.openconfig.<name> [-e variable=value ...]
+```
+
+They take the connection settings from the inventory, so the same playbook runs on every router your inventory describes; see [Inventory Patterns](getting-started/inventory-patterns.md). Each playbook lists its variables in the comment at the top, and `-e target=<pattern>` limits it to some routers. Reports, snapshots and backups are written below the current directory.
+
+| Playbook | What it does | Output |
+| --- | --- | --- |
+| [safe_config_change](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/playbooks/safe_config_change.yml) | Backup, preview, optional approval, apply and verify. With `use_confirmed_commit: true` the change is a confirmed commit that is cancelled when the verification fails | `backup/` |
+| [config_snapshot](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/playbooks/config_snapshot.yml) | Saves the configuration, keeps a history per router and reports drift since the previous run | `snapshots/<host>/` |
+| [lldp_neighbors](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/playbooks/lldp_neighbors.yml) | Topology report from OpenConfig LLDP; checks the cabling against `expected_neighbors` | `reports/lldp_neighbors.{csv,json}` |
+| [interface_health](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/playbooks/interface_health.yml) | Interfaces that are admin up but not oper up, or have errors or discards above a threshold | `reports/interface_health.{csv,json}` |
+| [reachability_check](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/playbooks/reachability_check.yml) | gNOI ping from every router to a list of destinations, with loss and round-trip times | `reports/reachability.{csv,json}` |
+| [os_upgrade](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/playbooks/os_upgrade.yml) | gNOI OS install and activate, one router at a time, with configuration backup and version check | `backup/` |
+| [device_inventory](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/playbooks/device_inventory.yml) | Vendor, model, serial number, software version, gNMI version, encodings and models of every router | `reports/device_inventory.{csv,json}` |
+
+The read playbooks use the OpenConfig models. `os_upgrade` needs gNOI OS, which SR Linux supports on hardware platforms.
+
+### A safe change
+
+Describe the change in a file:
+
+```yaml
+# change.yml
+origin: openconfig
+use_confirmed_commit: true
+rollback_duration: 5m
+changes:
+  update:
+    - path: /lldp/config/enabled
+      value: true
+verify:
+  - path: /lldp/config/enabled
+    value: true
+```
+
+Run it against one router first, then the rest. Routers are changed one at a time unless you set `batch_size`:
+
+```bash
+ansible-playbook -i inventory.yml nokia.openconfig.safe_config_change -e @change.yml -e target=leaf1
+ansible-playbook -i inventory.yml nokia.openconfig.safe_config_change -e @change.yml
+```
+
+If a read-back value differs, the confirmed commit is cancelled and the router returns to its previous configuration. Without a confirmed commit, the playbook stops and names the backup to restore.
+
+### Drift detection
+
+```bash
+ansible-playbook -i inventory.yml nokia.openconfig.config_snapshot --diff
+```
+
+The first run saves a baseline. Later runs report the routers whose configuration changed and, with `--diff`, show the change. Add `-e fail_on_drift=true` to make drift fail the run, for example in a scheduled job.
+
+### Example inventory
+
+[`playbooks/examples/`](https://github.com/nokia-steward/openconfig-ansible-integration/tree/main/playbooks/examples) has an inventory with group variables for Nokia SR Linux, Nokia SR OS, Cisco IOS XE, Cisco IOS XR and a generic gNMI router, and an example change. Copy it as a starting point.
+
+## Integration test playbooks
+
 The playbooks below are part of the integration test suite in [`tests/playbooks/`](https://github.com/nokia-steward/openconfig-ansible-integration/tree/main/tests/playbooks). Each one runs against Nokia SR OS, SR Linux or both, and can be used as a template for your own playbooks.
 
 The Platform column names the routers a playbook runs on. Playbooks for both platforms take their native YANG paths from the group variables [`nokia_srsim.yml`](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/tests/playbooks/group_vars/nokia_srsim.yml) and [`nokia_srlinux.yml`](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/tests/playbooks/group_vars/nokia_srlinux.yml). Playbooks marked OpenConfig use the OpenConfig paths in [`model_oc.yml`](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/tests/playbooks/vars/model_oc.yml); OpenConfig must be enabled on the router.
 
-## gNMI
+### gNMI
 
 | Playbook | Platform | Description |
 | --- | --- | --- |
@@ -25,7 +90,7 @@ The Platform column names the routers a playbook runs on. Playbooks for both pla
 | [gNMI_Subscribe_SRL.yml](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/tests/playbooks/gNMI_Subscribe_SRL.yml) | SR Linux | State and configuration subscriptions |
 | [gNMI_Restore_SRL.yml](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/tests/playbooks/gNMI_Restore_SRL.yml) | SR Linux | Backup, change and full restore with `replace` on `/` |
 
-## gNOI and gNSI
+### gNOI and gNSI
 
 | Playbook | Platform | Description |
 | --- | --- | --- |
@@ -34,7 +99,7 @@ The Platform column names the routers a playbook runs on. Playbooks for both pla
 | [gNOI_Healthz_SRL.yml](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/tests/playbooks/gNOI_Healthz_SRL.yml) | SR Linux | Healthz List and Get |
 | [gNSI_Validate_SRL.yml](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/tests/playbooks/gNSI_Validate_SRL.yml) | SR Linux | Authz, Certz, Pathz and Credentialz, including a Certz profile add and delete |
 
-## Running the integration tests
+### Running the integration tests
 
 The test runner groups the playbooks into categories, defined in [`tests/playbooks.yml`](https://github.com/nokia-steward/openconfig-ansible-integration/blob/main/tests/playbooks.yml), for example `common`, `sros`, `srlinux`, `gnoi` and `gnsi`. To run them in a containerlab topology:
 

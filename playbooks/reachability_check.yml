@@ -1,0 +1,118 @@
+---
+# Pings a list of destinations from every router with gNOI System.Ping and
+# reports packet loss and round-trip times, for example before and after a
+# maintenance window.
+#
+# Variables:
+#   ping_destinations    list of addresses, or of dicts with destination and
+#                        optionally network_instance and count (required)
+#   ping_network_instance  default network instance, for example mgmt
+#                        (SR Linux) or management (SR OS)
+#   ping_count           packets per destination (default 5)
+#   max_loss_percent     loss above which a destination counts as unreachable
+#                        (default 0)
+#   report_dir           default ./reports
+#   fail_on_loss         fail routers with unreachable destinations (default true)
+#   target               host pattern (default all)
+#
+#   ansible-playbook -i inventory.yml nokia.openconfig.reachability_check \
+#     -e '{"ping_destinations": ["192.0.2.1", "198.51.100.1"]}'
+- name: Reachability check
+  hosts: "{{ target | default('all') }}"
+  gather_facts: false
+
+  vars:
+    report_dir: "{{ lookup('ansible.builtin.env', 'PWD') }}/reports"
+    ping_count: 5
+    max_loss_percent: 0
+    fail_on_loss: true
+
+  tasks:
+    - name: Check the destinations
+      ansible.builtin.assert:
+        that:
+          - ping_destinations is defined
+          - ping_destinations | length > 0
+        fail_msg: Define ping_destinations, see the comment at the top of this playbook
+        quiet: true
+
+    - name: Ping the destinations
+      nokia.openconfig.gnoi_system_ping:
+        destination: "{{ item.destination | default(item) }}"
+        network_instance: "{{ item.network_instance | default(ping_network_instance | default(omit)) }}"
+        count: "{{ item.count | default(ping_count) | int }}"
+        interval: 1s
+      loop: "{{ ping_destinations }}"
+      loop_control:
+        label: "{{ item.destination | default(item) }}"
+      register: pings
+      failed_when: false
+
+    - name: Evaluate the results
+      ansible.builtin.set_fact:
+        reachability_report: >-
+          {%- set ns = namespace(rows=[]) -%}
+          {%- for result in pings.results -%}
+          {%- set summary = (result.output | from_json | last | default({})) if result.output is defined else {} -%}
+          {%- set sent = summary.sent | default(0) | int -%}
+          {%- set received = summary.received | default(0) | int -%}
+          {%- set loss = (100.0 if sent == 0 else ((sent - received) * 100 / sent) | round(1)) -%}
+          {%- set ns.rows = ns.rows + [{
+                'host': inventory_hostname,
+                'destination': result.item.destination | default(result.item),
+                'sent': sent,
+                'received': received,
+                'loss_percent': loss,
+                'avg_ms': ((summary.avgTime | default(0) | int) / 1000000) | round(2),
+                'max_ms': ((summary.maxTime | default(0) | int) / 1000000) | round(2),
+                'reachable': result.output is defined and loss <= max_loss_percent | float,
+                'error': '' if result.output is defined else result.msg | default('ping failed')}] -%}
+          {%- endfor -%}
+          {{ ns.rows }}
+
+    - name: Show the results
+      ansible.builtin.debug:
+        msg: >-
+          {{ reachability_report | map(attribute='destination')
+             | zip(reachability_report | map(attribute='loss_percent') | map('regex_replace', '$', '% loss'),
+                   reachability_report | map(attribute='avg_ms') | map('regex_replace', '$', ' ms avg'),
+                   reachability_report | map(attribute='error'))
+             | map('select') | map('join', ', ') | list }}
+
+    - name: Write the reports
+      delegate_to: localhost
+      run_once: true
+      vars:
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+        rows: "{{ ansible_play_hosts | map('extract', hostvars, 'reachability_report') | flatten }}"
+        columns: [host, destination, sent, received, loss_percent, avg_ms, max_ms, reachable, error]
+      block:
+        - name: Create the report directory
+          ansible.builtin.file:
+            path: "{{ report_dir }}"
+            state: directory
+            mode: "0750"
+
+        - name: Write the CSV report
+          ansible.builtin.copy:
+            dest: "{{ report_dir }}/reachability.csv"
+            mode: "0640"
+            content: |
+              {{ columns | join(',') }}
+              {% for row in rows %}
+              {{ columns | map('extract', row) | map('string') | map('regex_replace', ',', ';') | join(',') }}
+              {% endfor %}
+
+        - name: Write the JSON report
+          ansible.builtin.copy:
+            dest: "{{ report_dir }}/reachability.json"
+            mode: "0640"
+            content: "{{ rows | to_nice_json }}\n"
+
+    - name: Fail on unreachable destinations
+      ansible.builtin.fail:
+        msg: >-
+          Unreachable from {{ inventory_hostname }}:
+          {{ reachability_report | rejectattr('reachable') | map(attribute='destination') | join(', ') }}
+      when: fail_on_loss | bool and reachability_report | rejectattr('reachable') | list | length > 0

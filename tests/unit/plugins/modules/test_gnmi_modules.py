@@ -59,6 +59,15 @@ def test_get_default_type_is_all(connection, run_module):
     assert connection.calls[0][1]['path'] == ['']
 
 
+def test_get_origin_is_passed(connection, run_module):
+    connection.responses['gnmiGet'] = get({})
+    run_module(gnmi_get.main, {'path': ['/system'], 'origin': 'openconfig'})
+    assert connection.calls[0][1]['origin'] == 'openconfig'
+    connection.calls.clear()
+    run_module(gnmi_get.main, {'path': ['/system']})
+    assert connection.calls[0][1]['origin'] is None
+
+
 def test_get_invalid_type(connection, run_module):
     result = run_module(gnmi_get.main, {'type': 'running'})
     assert result['failed']
@@ -89,6 +98,17 @@ def test_set_changed_and_diff(connection, run_module):
     assert result['changed'] is True
     assert json.loads(result['diff']['before']) == {'a': 1}
     assert json.loads(result['output'])['response'][0]['op'] == 'UPDATE'
+
+
+def test_set_origin_is_used_for_set_snapshots_and_backup(connection, run_module):
+    connection.responses['gnmiGet'] = [get({'a': 1}), get({'a': 2})]
+    connection.responses['gnmiSet'] = get({})
+    run_module(gnmi_set.main, {'origin': 'openconfig', 'update': [{'path': 'a', 'value': 2}]})
+    assert [c[1]['origin'] for c in connection.calls] == ['openconfig'] * 3
+    connection.calls.clear()
+    connection.responses['gnmiGet'] = get({})
+    run_module(gnmi_set.main, {'origin': 'openconfig', 'backup': True})
+    assert connection.calls[0][1]['origin'] == 'openconfig'
 
 
 def test_set_unchanged(connection, run_module):
@@ -265,6 +285,12 @@ def test_subscribe_removed_subscription_keys(connection, run_module):
     assert result['msg'] == ('Subscription keys removed in 2.0.0: mode, sampleInterval. '
                              'Use stream_mode, sample_interval instead')
     assert connection.calls == []
+
+
+def test_subscribe_origin_is_passed(connection, run_module):
+    connection.responses['gnmiSubscribe'] = get({})
+    run_module(gnmi_subscribe.main, {'path': ['/a'], 'origin': 'openconfig', 'mode': 'once'})
+    assert connection.calls[0][1]['origin'] == 'openconfig'
 
 
 def test_subscribe_subscription_list(connection, run_module):

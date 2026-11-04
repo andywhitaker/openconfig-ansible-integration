@@ -165,13 +165,18 @@ def _parse_element(element, path):
     return entry
 
 
-def encode_path(xpath, target=None):
+def encode_path(xpath, target=None, origin=None, qualified=False):
     """
     Encodes an XPATH-like string into the dict form of gnmi.Path.
 
-    The origin is given as "origin:/path". For compatibility
-    with 1.0.0 a module prefix on any element name ("/oc:interfaces") also
-    sets the origin.
+    The origin is given as "origin:/path", or as origin argument, which
+    only applies if the path does not name one.
+
+    Once an origin is known (from the path, the origin argument or with
+    qualified=True), element names keep their YANG module prefix, as in
+    "rfc7951:/Cisco-IOS-XE-native:native". Otherwise, for compatibility with
+    1.0.0, a module prefix on an element name ("/oc:interfaces") sets the
+    origin.
     """
     result = {}
     xpath = (xpath or '').strip()
@@ -180,11 +185,14 @@ def encode_path(xpath, target=None):
     if match:
         result['origin'] = match.group(1)
         xpath = match.group(2)
+    elif origin:
+        result['origin'] = origin
+    qualified = qualified or 'origin' in result
 
     elems = []
     for element in _split_elements(xpath):
         entry = _parse_element(element, xpath)
-        if ':' in entry['name']:
+        if ':' in entry['name'] and not qualified:
             origin, sep, name = entry['name'].partition(':')
             if ':' in name or not origin or not name:
                 raise GnmiError("Invalid path syntax: %s" % element)
@@ -292,9 +300,28 @@ def decode_value(val):
 # Requests
 
 
-def _prefix(prefix, target):
-    encoded = encode_path(prefix, target)
-    return encoded or None
+def _prefix(prefix, target, origin=None):
+    """
+    Encodes the prefix and returns it with a function that encodes the
+    paths below it.
+
+    gNMI allows the origin in the prefix or in the paths, not in both. A
+    default origin goes to a non-empty prefix, otherwise to each path.
+    Paths that name their own origin keep it.
+    """
+    encoded = encode_path(prefix, target, qualified=bool(origin))
+    path_origin = origin
+    if encoded.get('origin'):
+        path_origin = None
+    elif origin and encoded.get('elem'):
+        encoded['origin'] = origin
+        path_origin = None
+    qualified = bool(origin) or 'origin' in encoded
+
+    def encode(path):
+        return encode_path(path, origin=path_origin, qualified=qualified)
+
+    return encoded or None, encode
 
 
 def _models(model):
@@ -305,21 +332,22 @@ def _compact(request):
     return dict((k, v) for k, v in request.items() if v not in (None, [], {}, ''))
 
 
-def build_get_request(path=None, prefix=None, target=None, model=None, type=None, encoding=None):
+def build_get_request(path=None, prefix=None, target=None, model=None, type=None, encoding=None, origin=None):
     """Builds the dict form of gnmi.GetRequest."""
     data_type = (type or 'ALL').upper()
     if data_type not in GET_TYPES:
         raise GnmiError("Invalid type %s (one of %s)" % (type, ', '.join(GET_TYPES)))
+    encoded_prefix, encode = _prefix(prefix, target, origin)
     return _compact({
-        'prefix': _prefix(prefix, target),
-        'path': [encode_path(p) for p in (path or [''])],
+        'prefix': encoded_prefix,
+        'path': [encode(p) for p in (path or [''])],
         'type': data_type,
         'encoding': (encoding or 'JSON_IETF').upper(),
         'use_models': _models(model),
     })
 
 
-def _set_entries(entries, default_encoding, kind):
+def _set_entries(entries, default_encoding, kind, encode):
     result = []
     for entry in entries or []:
         if not isinstance(entry, dict) or 'path' not in entry:
@@ -331,17 +359,19 @@ def _set_entries(entries, default_encoding, kind):
         else:
             raise GnmiError("Missing 'value' for %s path %s" % (kind, entry['path']))
         encoding = entry.get('encoding') or default_encoding
-        result.append({'path': encode_path(entry['path']), 'val': encode_value(value, encoding)})
+        result.append({'path': encode(entry['path']), 'val': encode_value(value, encoding)})
     return result
 
 
-def build_set_request(prefix=None, target=None, update=None, replace=None, delete=None, encoding=None):
+def build_set_request(prefix=None, target=None, update=None, replace=None, delete=None, encoding=None,
+                      origin=None):
     """Builds the dict form of gnmi.SetRequest (without extensions)."""
+    encoded_prefix, encode = _prefix(prefix, target, origin)
     return _compact({
-        'prefix': _prefix(prefix, target),
-        'delete': [encode_path(p) for p in (delete or [])],
-        'replace': _set_entries(replace, encoding, 'replace'),
-        'update': _set_entries(update, encoding, 'update'),
+        'prefix': encoded_prefix,
+        'delete': [encode(p) for p in (delete or [])],
+        'replace': _set_entries(replace, encoding, 'replace', encode),
+        'update': _set_entries(update, encoding, 'update', encode),
     })
 
 
@@ -377,7 +407,7 @@ def load_set_request(data):
 def build_subscription_list(path=None, subscription=None, prefix=None, target=None, model=None,
                             mode=None, stream_mode=None, sample_interval=None, heartbeat_interval=None,
                             suppress_redundant=None, updates_only=None, allow_aggregation=None,
-                            qos=None, encoding=None):
+                            qos=None, encoding=None, origin=None):
     """Builds the dict form of gnmi.SubscriptionList."""
     mode = (mode or 'STREAM').upper()
     if mode not in SUBSCRIBE_MODES:
@@ -386,9 +416,10 @@ def build_subscription_list(path=None, subscription=None, prefix=None, target=No
         raise GnmiError("path and subscription are mutually exclusive")
     if not path and not subscription:
         raise GnmiError("One of path or subscription is required")
+    encoded_prefix, encode = _prefix(prefix, target, origin)
 
     def one(entry_path, entry_stream_mode, entry_sample, entry_heartbeat, entry_suppress):
-        item = {'path': encode_path(entry_path)}
+        item = {'path': encode(entry_path)}
         if mode == 'STREAM':
             sm = (entry_stream_mode or 'SAMPLE').upper()
             if sm not in STREAM_MODES:
@@ -421,7 +452,7 @@ def build_subscription_list(path=None, subscription=None, prefix=None, target=No
                              entry.get('suppress_redundant')))
 
     return _compact({
-        'prefix': _prefix(prefix, target),
+        'prefix': encoded_prefix,
         'subscription': items,
         'mode': mode,
         'encoding': (encoding or 'JSON_IETF').upper(),

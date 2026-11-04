@@ -1,0 +1,42 @@
+---
+DOCUMENTATION:
+  name: strip_yang_prefixes
+  author:
+    - Sven Wisotzky (@wisotzky)
+  version_added: 2.0.1
+  short_description: Remove YANG module prefixes from member names
+  description:
+    - With the C(JSON_IETF) encoding, routers qualify member names with the
+      YANG module, for example C(openconfig-lldp:lldp) or
+      C(srl_nokia-interfaces:interface). Where the prefix appears differs
+      between vendors and releases.
+    - This filter removes the prefix from every member name, so the same
+      expression works for every router. Values, such as identity
+      references, are not changed.
+    - Accepts the C(output) string of M(nokia.openconfig.gnmi_get) and
+      M(nokia.openconfig.gnmi_subscribe) directly, so C(from_json) is not
+      needed.
+    - If two members differ only in their prefix, containers are merged and
+      for other values the last one wins.
+  options:
+    _input:
+      description: Data tree, or a JSON string of it.
+      type: raw
+      required: true
+
+EXAMPLES: |
+  - name: Read the OpenConfig LLDP neighbors
+    nokia.openconfig.gnmi_get:
+      origin: openconfig
+      path:
+        - /lldp/interfaces/interface/neighbors
+    register: lldp
+
+  - name: Show the interfaces with neighbors
+    ansible.builtin.debug:
+      msg: "{{ (lldp.output | nokia.openconfig.strip_yang_prefixes).lldp.interfaces.interface | map(attribute='name') }}"
+
+RETURN:
+  _value:
+    description: The data tree with plain member names.
+    type: raw

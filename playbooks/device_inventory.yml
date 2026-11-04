@@ -1,0 +1,118 @@
+---
+# Builds a hardware and software inventory of every router from gNMI
+# Capabilities and the OpenConfig system and platform models. Useful to feed
+# a CMDB or to check which routers support which models and encodings.
+#
+# Data a router does not provide is left empty; only Capabilities is required.
+#
+# Reports, written on the controller:
+#   <report_dir>/device_inventory.csv   one row per router
+#   <report_dir>/device_inventory.json  the same data plus the model list
+#
+# Variables:
+#   report_dir         default ./reports
+#   inventory_origin   default openconfig; set to "" for routers that
+#                      expect OpenConfig paths without origin
+#   target             host pattern (default all)
+#
+#   ansible-playbook -i inventory.yml nokia.openconfig.device_inventory
+- name: Device inventory
+  hosts: "{{ target | default('all') }}"
+  gather_facts: false
+
+  vars:
+    report_dir: "{{ lookup('ansible.builtin.env', 'PWD') }}/reports"
+    inventory_origin: openconfig
+
+  tasks:
+    - name: Read the capabilities
+      nokia.openconfig.gnmi_capabilities:
+      register: capabilities
+
+    - name: Read the system state
+      nokia.openconfig.gnmi_get:
+        path:
+          - /system/state
+        origin: "{{ inventory_origin }}"
+        type: state
+      register: system
+      failed_when: false
+
+    - name: Read the component state
+      nokia.openconfig.gnmi_get:
+        path:
+          - /components/component/state
+        origin: "{{ inventory_origin }}"
+        type: state
+      register: components
+      failed_when: false
+
+    - name: Combine the data
+      ansible.builtin.set_fact:
+        device_record: >-
+          {%- set sys = system.output | default('{}') | nokia.openconfig.strip_yang_prefixes -%}
+          {%- set sys = ((sys.system | default(sys)).state | default(sys.system | default(sys))) -%}
+          {%- set comp = components.output | default('{}') | nokia.openconfig.strip_yang_prefixes -%}
+          {%- set comp = (comp.components | default(comp)).component | default([]) -%}
+          {%- set ns = namespace(chassis={}) -%}
+          {%- for c in comp -%}
+          {%- if not ns.chassis and ((c.state | default({})).type | default('') | string).split(':') | last == 'CHASSIS' -%}
+          {%- set ns.chassis = c.state -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {%- set ch = ns.chassis -%}
+          {{ {
+            'host': inventory_hostname,
+            'hostname': sys.hostname | default(''),
+            'software_version': sys['software-version'] | default(''),
+            'vendor': ch['mfg-name'] | default(''),
+            'model': ch.description | default(ch['part-no'] | default('')),
+            'part_number': ch['part-no'] | default(''),
+            'serial_number': ch['serial-no'] | default(''),
+            'hardware_version': ch['hardware-version'] | default(''),
+            'gnmi_version': capabilities.gnmi_version,
+            'encodings': capabilities.encodings | join(' '),
+            'model_count': capabilities.models | length,
+            'openconfig_models': capabilities.models | map(attribute='name') | select('match', 'openconfig-') | list | length,
+            'models': capabilities.models | map(attribute='name') | sort,
+          } }}
+
+    - name: Show the record
+      ansible.builtin.debug:
+        msg: >-
+          {{ device_record.hostname or inventory_hostname }}: {{ device_record.vendor }} {{ device_record.model }}
+          serial {{ device_record.serial_number or 'unknown' }}, software {{ device_record.software_version or 'unknown' }},
+          gNMI {{ device_record.gnmi_version }}, {{ device_record.model_count }} models
+          ({{ device_record.openconfig_models }} OpenConfig), encodings {{ device_record.encodings }}
+
+    - name: Write the reports
+      delegate_to: localhost
+      run_once: true
+      vars:
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+        rows: "{{ ansible_play_hosts | map('extract', hostvars, 'device_record') | list }}"
+        columns: [host, hostname, vendor, model, part_number, serial_number, hardware_version, software_version,
+                  gnmi_version, encodings, model_count, openconfig_models]
+      block:
+        - name: Create the report directory
+          ansible.builtin.file:
+            path: "{{ report_dir }}"
+            state: directory
+            mode: "0750"
+
+        - name: Write the CSV report
+          ansible.builtin.copy:
+            dest: "{{ report_dir }}/device_inventory.csv"
+            mode: "0640"
+            content: |
+              {{ columns | join(',') }}
+              {% for row in rows %}
+              {{ columns | map('extract', row) | map('string') | map('regex_replace', ',', ';') | join(',') }}
+              {% endfor %}
+
+        - name: Write the JSON report
+          ansible.builtin.copy:
+            dest: "{{ report_dir }}/device_inventory.json"
+            mode: "0640"
+            content: "{{ rows | to_nice_json }}\n"

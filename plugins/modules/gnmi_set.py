@@ -31,6 +31,18 @@ options:
     description:
       - Common prefix for all paths, C(SetRequest.prefix).
     type: str
+  origin:
+    description:
+      - Origin of the paths, C(Path.origin), for example C(openconfig) or
+        C(rfc7951). Set on O(prefix) if given, otherwise on each path that
+        does not name its own origin.
+      - With an origin, element names keep their YANG module prefix, for
+        example C(/Cisco-IOS-XE-native:native/hostname) with C(rfc7951).
+      - Also used for the gNMI Get requests of O(backup) and C(changed).
+      - Defaults to the C(gnmi_origin) option of the connection. An empty
+        string sends the paths without origin.
+    type: str
+    version_added: 2.0.1
   target:
     description:
       - Target name set on the prefix, C(Path.target).
@@ -44,8 +56,8 @@ options:
     suboptions:
       path:
         description:
-          - Path to update. The origin is given as prefix, for example
-            C(openconfig:/system/config).
+          - Path to update. A path can name its origin, for example
+            C(openconfig:/system/config). Otherwise O(origin) applies.
         type: str
         required: true
       value:
@@ -213,6 +225,15 @@ EXAMPLES = """
       - path: /interface[name=ethernet-1/1]/description
         value: uplink to spine1
 
+- name: Enable LLDP and set the hostname using OpenConfig
+  nokia.openconfig.gnmi_set:
+    origin: openconfig
+    update:
+      - path: /lldp/config/enabled
+        value: true
+      - path: /system/config/hostname
+        value: leaf1
+
 - name: Apply a request file
   nokia.openconfig.gnmi_set:
     request_file: set-request.yml
@@ -371,12 +392,13 @@ def _load_request_file(module, path):
 _UNKNOWN = object()
 
 
-def _snapshot(module, rpc, paths, prefix, target):
+def _snapshot(module, rpc, paths, prefix, target, origin):
     """Reads the affected configuration. Some targets reject a Get of a path
     that does not exist (yet), so a failed read does not fail the task."""
     if not paths:
         return None
-    response = rpc.call('gnmiGet', dict(type='CONFIG', prefix=prefix, target=target, path=paths), fail=False)
+    response = rpc.call('gnmiGet', dict(type='CONFIG', prefix=prefix, target=target, path=paths, origin=origin),
+                        fail=False)
     if response is None:
         module.warn("Could not read the affected paths, changed is reported as true")
         return _UNKNOWN
@@ -392,6 +414,7 @@ def main():
     backup_spec = dict(filename=dict(type='str'), dir_path=dict(type='path'))
     argument_spec = dict(
         prefix=dict(type='str'),
+        origin=dict(type='str'),
         target=dict(type='str'),
         update=dict(type='list', elements='dict', options=entry_spec),
         replace=dict(type='list', elements='dict', options=entry_spec),
@@ -432,8 +455,8 @@ def main():
         module.fail_json(msg="Nothing to do: one of update, replace, delete, request_file, "
                              "a commit operation or backup is required")
 
-    request = dict(prefix=p['prefix'], target=p['target'], update=update, replace=replace, delete=delete,
-                   encoding=normalize_enum(module, 'encoding', ('JSON', 'JSON_IETF')), **commit)
+    request = dict(prefix=p['prefix'], origin=p['origin'], target=p['target'], update=update, replace=replace,
+                   delete=delete, encoding=normalize_enum(module, 'encoding', ('JSON', 'JSON_IETF')), **commit)
     rpc = Rpc(module)
     result = dict(changed=False)
 
@@ -445,23 +468,23 @@ def main():
     paths = [e['path'] for e in update] + [e['path'] for e in replace] + delete
     full = None
     if p['backup']:
-        full = rpc('gnmiGet', type='CONFIG', target=p['target'], path=['/'])['output']
+        full = rpc('gnmiGet', type='CONFIG', target=p['target'], path=['/'], origin=p['origin'])['output']
         result['__backup__'] = to_json(full)
 
     if has_changes or has_commit:
         if full is not None:
             before = full
         else:
-            before = _snapshot(module, rpc, paths, p['prefix'], p['target'])
+            before = _snapshot(module, rpc, paths, p['prefix'], p['target'], p['origin'])
 
         response = rpc('gnmiSet', **request)
         result['output'] = to_json(response['output'])
         result['extensions'] = response['extensions']
 
         if full is not None:
-            after = rpc('gnmiGet', type='CONFIG', target=p['target'], path=['/'])['output']
+            after = rpc('gnmiGet', type='CONFIG', target=p['target'], path=['/'], origin=p['origin'])['output']
         else:
-            after = _snapshot(module, rpc, paths, p['prefix'], p['target'])
+            after = _snapshot(module, rpc, paths, p['prefix'], p['target'], p['origin'])
 
         known = before is not _UNKNOWN and after is not _UNKNOWN
         if has_changes and known:

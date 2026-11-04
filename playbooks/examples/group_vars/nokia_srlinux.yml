@@ -1,0 +1,9 @@
+---
+# Native SR Linux paths need no origin. For hosts managed through OpenConfig
+# only, add ansible_gnmi_origin: openconfig.
+ansible_connection: nokia.openconfig.grpc
+ansible_port: 57400
+ansible_user: admin
+ansible_password: "{{ vault_srl_password }}"
+ansible_root_certificates_file: ./certs/ca.pem
+ping_network_instance: mgmt

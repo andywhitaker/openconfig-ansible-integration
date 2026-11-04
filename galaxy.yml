@@ -1,11 +1,11 @@
 namespace: nokia
 name: openconfig
-version: 2.0.0
+version: 2.0.1
 readme: README.md
 authors:
 - Hans Thienpondt (@HansThienpondt)
 - Sven Wisotzky (@wisotzky)
-description: Ansible collection to support networking devices using OpenConfig gRPC APIs
+description: OpenConfig gNMI, gNOI and gNSI for Ansible over one persistent gRPC connection, with workflow playbooks. Validated on Nokia SR OS and SR Linux; other gNMI routers are configured through inventory variables.
 license: BSD-3-Clause
 tags:
 - ansible

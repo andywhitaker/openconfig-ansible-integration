@@ -1,0 +1,158 @@
+---
+# Applies a gNMI configuration change in five steps: back up, preview,
+# (optionally) approve, apply and verify.
+#
+# With use_confirmed_commit the change is sent as a confirmed commit. It is
+# confirmed only after the verification passed and cancelled (rolled back)
+# when it fails. If the playbook dies in between, the router rolls the change
+# back when rollback_duration expires.
+#
+# Variables, for example in a file passed with -e @change.yml:
+#   changes            update, replace and delete lists in gnmi_set format (required)
+#   verify             list of {path, value}: leaves that must read back with
+#                      these values after the change
+#   origin             origin of all paths, for example openconfig
+#   encoding           JSON or JSON_IETF for the values
+#   approve            true asks for confirmation after the preview
+#   use_confirmed_commit, rollback_duration (default 5m)
+#   backup_dir         directory for backups (default ./backup)
+#   target             host pattern (default all), batch_size (default 1)
+#
+#   ansible-playbook -i inventory.yml nokia.openconfig.safe_config_change -e @change.yml
+- name: Safe gNMI configuration change
+  hosts: "{{ target | default('all') }}"
+  gather_facts: false
+  serial: "{{ batch_size | default(1) }}"
+
+  vars:
+    backup_dir: "{{ lookup('ansible.builtin.env', 'PWD') }}/backup"
+    use_confirmed_commit: false
+    rollback_duration: 5m
+    approve: false
+    verify: []
+
+  tasks:
+    - name: Check the change definition
+      ansible.builtin.assert:
+        that:
+          - changes is defined
+          - changes is mapping
+          - (changes['update'] | default([]) + changes['replace'] | default([]) + changes['delete'] | default([])) | length > 0
+        fail_msg: "Define changes with at least one of update, replace or delete, see the comment at the top of this playbook"
+        quiet: true
+
+    - name: Choose the commit ID
+      ansible.builtin.set_fact:
+        commit_id: "ansible-{{ inventory_hostname }}-{{ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}"
+
+    - name: Create the backup directory
+      ansible.builtin.file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: "0750"
+      delegate_to: localhost
+      run_once: true
+      vars:
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+    - name: Back up the configuration
+      nokia.openconfig.gnmi_set:
+        backup: true
+        origin: "{{ origin | default(omit) }}"
+        backup_options:
+          dir_path: "{{ backup_dir }}"
+      register: backup
+
+    - name: Build the request without sending it
+      nokia.openconfig.gnmi_set:
+        update: "{{ changes['update'] | default(omit) }}"
+        replace: "{{ changes['replace'] | default(omit) }}"
+        delete: "{{ changes['delete'] | default(omit) }}"
+        origin: "{{ origin | default(omit) }}"
+        encoding: "{{ encoding | default(omit) }}"
+      check_mode: true
+      register: preview
+
+    - name: Show the request
+      ansible.builtin.debug:
+        var: preview.request
+
+    - name: Ask for approval
+      ansible.builtin.pause:
+        prompt: "Apply the change to {{ ansible_play_batch | join(', ') }}? Type 'yes' to continue"
+      register: approval
+      when: approve | bool
+
+    - name: Stop without approval
+      ansible.builtin.fail:
+        msg: Change not approved
+      when: approve | bool and approval.user_input | default('') != 'yes'
+
+    - name: Apply and verify the change
+      block:
+        - name: Apply the change
+          nokia.openconfig.gnmi_set:
+            update: "{{ changes['update'] | default(omit) }}"
+            replace: "{{ changes['replace'] | default(omit) }}"
+            delete: "{{ changes['delete'] | default(omit) }}"
+            origin: "{{ origin | default(omit) }}"
+            encoding: "{{ encoding | default(omit) }}"
+            commit_id: "{{ commit_id if use_confirmed_commit | bool else omit }}"
+            commit_request: "{{ use_confirmed_commit | bool }}"
+            rollback_duration: "{{ rollback_duration if use_confirmed_commit | bool else omit }}"
+          diff: true
+          register: applied
+
+        - name: Read back the verified paths
+          nokia.openconfig.gnmi_get:
+            path:
+              - "{{ item.path }}"
+            origin: "{{ origin | default(omit) }}"
+            type: config
+            values_only: true
+          loop: "{{ verify }}"
+          loop_control:
+            label: "{{ item.path }}"
+          register: readback
+
+        - name: Compare the read-back values
+          ansible.builtin.assert:
+            that:
+              - (actual | string | lower) == (item.item.value | string | lower)
+            fail_msg: "{{ item.item.path }} reads {{ actual }}, expected {{ item.item.value }}"
+            quiet: true
+          vars:
+            read_value: "{{ item.output | from_json | first | default(none) }}"
+            actual: "{{ (read_value.values() | first) if read_value is mapping and read_value | length == 1 else read_value }}"
+          loop: "{{ readback.results }}"
+          loop_control:
+            label: "{{ item.item.path }}"
+
+        - name: Confirm the commit
+          nokia.openconfig.gnmi_set:
+            commit_id: "{{ commit_id }}"
+            commit_confirm: true
+          when: use_confirmed_commit | bool
+
+      rescue:
+        - name: Roll back the confirmed commit
+          nokia.openconfig.gnmi_set:
+            commit_id: "{{ commit_id }}"
+            commit_cancel: true
+          when: use_confirmed_commit | bool and applied is defined and applied is succeeded
+
+        - name: Report the failure
+          ansible.builtin.fail:
+            msg: >-
+              The change failed on {{ inventory_hostname }}: {{ ansible_failed_result.msg | default('see above') }}.
+              {{ 'The confirmed commit was rolled back.' if use_confirmed_commit | bool and applied is succeeded
+                 else 'Restore from ' ~ backup.backup_path ~ ' if needed (gnmi_set replace on /).' }}
+
+    - name: Summarize
+      ansible.builtin.debug:
+        msg:
+          - "Changed: {{ applied.changed }}"
+          - "Backup: {{ backup.backup_path }}"
+          - "Verified paths: {{ verify | length }}"
+          - "{{ 'Confirmed commit ' ~ commit_id if use_confirmed_commit | bool else 'Committed without confirmation' }}"

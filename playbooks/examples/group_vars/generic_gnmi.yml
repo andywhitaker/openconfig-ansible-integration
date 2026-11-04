@@ -1,0 +1,8 @@
+---
+# Any router with an OpenConfig gNMI server. Set the port of its gNMI server.
+ansible_connection: nokia.openconfig.grpc
+ansible_port: 6030
+ansible_user: admin
+ansible_password: "{{ vault_gnmi_password }}"
+ansible_root_certificates_file: ./certs/ca.pem
+ansible_gnmi_origin: openconfig

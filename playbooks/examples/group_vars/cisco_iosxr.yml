@@ -1,0 +1,9 @@
+---
+# OpenConfig paths take the origin openconfig. Native paths name the YANG
+# module in the first element, for example
+# /Cisco-IOS-XR-shellutil-oper:system-time/uptime, and need no origin option.
+ansible_connection: nokia.openconfig.grpc
+ansible_port: 57400
+ansible_user: admin
+ansible_password: "{{ vault_iosxr_password }}"
+ansible_root_certificates_file: ./certs/iosxr-ca.pem

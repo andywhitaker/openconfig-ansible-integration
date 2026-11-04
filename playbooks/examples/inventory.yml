@@ -1,0 +1,30 @@
+---
+# Example inventory for the playbooks of nokia.openconfig. The platform
+# settings are in group_vars/ next to this file; copy both and adjust the
+# addresses, certificates and credentials.
+#
+#   ansible-playbook -i inventory.yml nokia.openconfig.device_inventory
+routers:
+  children:
+    nokia_srlinux:
+      hosts:
+        leaf1:
+          ansible_host: 192.0.2.11
+        leaf2:
+          ansible_host: 192.0.2.12
+    nokia_sros:
+      hosts:
+        pe1:
+          ansible_host: 192.0.2.21
+    cisco_iosxe:
+      hosts:
+        branch1:
+          ansible_host: 192.0.2.31
+    cisco_iosxr:
+      hosts:
+        core1:
+          ansible_host: 192.0.2.41
+    generic_gnmi:
+      hosts:
+        spine1:
+          ansible_host: 192.0.2.51

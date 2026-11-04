@@ -16,6 +16,13 @@ The collection provides one module per RPC, using the management interface as pr
 
 The collection only contains modules for RPCs and gNMI extensions that are supported by [Nokia SR OS](https://www.nokia.com/ip-networks/service-router-operating-system-nos/) or [Nokia SR Linux](https://www.nokia.com/ip-networks/service-router-linux-NOS/). See the [reference](reference/index.md) for the full list.
 
+Most playbooks need only four of them: `gnmi_capabilities`, `gnmi_get`, `gnmi_set` and `gnmi_subscribe`. [Start Here](getting-started/start-here.md) maps common tasks to modules.
+
+### Playbooks and filter
+
+- Workflow playbooks for safe configuration changes, configuration snapshots with drift detection, LLDP and interface reports, reachability checks, OS upgrades and device inventory. Run them as `nokia.openconfig.<name>`, see [Examples](examples.md#shipped-playbooks).
+- The filter `nokia.openconfig.strip_yang_prefixes` removes YANG module prefixes from response data, see [Platform Notes](guides/platform-notes.md#reading-responses).
+
 ## Supported specifications
 
 The modules are built from the OpenConfig protobuf definitions listed below.
@@ -69,14 +76,16 @@ Sources are taken from [openconfig/gnsi](https://github.com/openconfig/gnsi) at 
 
 The collection is validated on Nokia SR OS and SR Linux. A lightweight gNMI, gNOI and gNSI mock server is included for component testing, which is useful when no SR OS or SR Linux image or license is available.
 
-The implementation follows the OpenConfig specifications, so the collection is intended to work with other vendors that expose the same gRPC services. Keep in mind that gNMI paths and payloads depend on the YANG models a device implements: native models, such as the Nokia SR OS and SR Linux models, differ between vendors, and support for OpenConfig models varies between platforms and releases.
+The implementation follows the OpenConfig specifications, so the collection works with routers of other vendors that expose the same gRPC services, for example Cisco IOS XE and IOS XR. Platform differences are set in the inventory: port, TLS, encoding and path origin. [Inventory Patterns](getting-started/inventory-patterns.md) has group variables per platform, and [Platform Notes](guides/platform-notes.md#other-vendors) lists what to check. Keep in mind that gNMI paths and payloads depend on the YANG models a device implements: native models differ between vendors, and support for OpenConfig models varies between platforms and releases.
 
 ## Getting started
 
-1. [Installation](getting-started/installation.md) — Python environment, external dependencies and the collection.
-2. [Quick Start](getting-started/quick-start.md) — enable gRPC on the router, set up the inventory and run a first gNMI Get.
-3. [User Guide](guides/user-guide.md) — connection options, gNMI, gNOI and gNSI modules and workflows.
-4. [Reference](reference/index.md) — module and plugin documentation, generated from the module sources.
+1. [Start Here](getting-started/start-here.md) — which module or playbook to use for a task.
+2. [Installation](getting-started/installation.md) — Python environment, external dependencies and the collection.
+3. [Quick Start](getting-started/quick-start.md) — enable gRPC on the router, set up the inventory and run a first gNMI Get.
+4. [Inventory Patterns](getting-started/inventory-patterns.md) — group variables per platform.
+5. [User Guide](guides/user-guide.md) — connection options, gNMI, gNOI and gNSI modules and workflows.
+6. [Reference](reference/index.md) — module and plugin documentation, generated from the module sources.
 
 ## Support
 
@@ -86,4 +95,4 @@ The implementation follows the OpenConfig specifications, so the collection is i
 
 ---
 
-**Collection version:** 2.0.0 · **License:** BSD 3-Clause · **Ansible:** 2.20+ · **Python:** 3.12+
+**Collection version:** 2.0.1 · **License:** BSD 3-Clause · **Ansible:** 2.20+ · **Python:** 3.12+

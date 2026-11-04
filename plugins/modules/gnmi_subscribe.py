@@ -45,6 +45,16 @@ options:
       - Mutually exclusive with O(path).
     type: list
     elements: dict
+  origin:
+    description:
+      - Origin of the paths, C(Path.origin), for example C(openconfig) or
+        C(rfc7951). Set on O(prefix) if given, otherwise on each path that
+        does not name its own origin.
+      - With an origin, element names keep their YANG module prefix.
+      - Defaults to the C(gnmi_origin) option of the connection. An empty
+        string sends the paths without origin.
+    type: str
+    version_added: 2.0.1
   prefix:
     description:
       - Common prefix for all paths, C(SubscriptionList.prefix).
@@ -194,6 +204,15 @@ EXAMPLES = """
     sample_interval: 1s
     duration: 5
 
+- name: Sample OpenConfig interface counters every 10 seconds for 30 seconds
+  nokia.openconfig.gnmi_subscribe:
+    origin: openconfig
+    path:
+      - /interfaces/interface/state/counters
+    stream_mode: sample
+    sample_interval: 10s
+    duration: 30
+
 - name: Collect configuration changes for 60 seconds (SR OS)
   nokia.openconfig.gnmi_subscribe:
     path:
@@ -273,6 +292,7 @@ def main():
     argument_spec = dict(
         path=dict(type='list', elements='str'),
         subscription=dict(type='list', elements='dict'),
+        origin=dict(type='str'),
         prefix=dict(type='str', default=''),
         target=dict(type='str'),
         model=dict(type='str'),

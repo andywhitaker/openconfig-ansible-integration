@@ -18,7 +18,8 @@
 
 | Parameter | Type | Comments |
 | --- | --- | --- |
-| path {#param-path} | list | Paths to retrieve, `GetRequest.path`.<br/>gNMI path strings with list keys, for example `/interface[name=ethernet-1/1]/description`.<br/>The origin is given as prefix, for example `openconfig:/interfaces/interface`.<br/>If omitted, the root path is retrieved.<br/>**Default:** `['']` |
+| path {#param-path} | list | Paths to retrieve, `GetRequest.path`.<br/>gNMI path strings with list keys, for example `/interface[name=ethernet-1/1]/description`.<br/>A path can name its origin, for example `openconfig:/interfaces/interface`. Otherwise [`origin`](#param-origin) applies.<br/>If omitted, the root path is retrieved.<br/>**Default:** `['']` |
+| origin {#param-origin} | str | Origin of the paths, `Path.origin`, for example `openconfig` or `rfc7951`. Set on [`prefix`](#param-prefix) if given, otherwise on each path that does not name its own origin.<br/>With an origin, element names keep their YANG module prefix, for example `/Cisco-IOS-XE-native:native/hostname` with `rfc7951`.<br/>Defaults to the `gnmi_origin` option of the connection. An empty string sends the paths without origin. |
 | prefix {#param-prefix} | str | Common prefix for all paths, `GetRequest.prefix`.<br/>**Default:** `''` |
 | target {#param-target} | str | Target name set on the prefix, `Path.target`. |
 | model {#param-model} | str | Restricts the request to a model by name as reported by [nokia.openconfig.gnmi_capabilities](nokia.openconfig.gnmi_capabilities.md), `GetRequest.use_models`. |
@@ -67,6 +68,21 @@
     path:
       - openconfig:/interfaces/interface[name=ethernet-1/1]/state/oper-status
     values_only: true
+
+- name: Get several OpenConfig paths with one origin
+  nokia.openconfig.gnmi_get:
+    origin: openconfig
+    path:
+      - /system/config/hostname
+      - /interfaces/interface[name=ethernet-1/1]/state/oper-status
+
+# Module-qualified first element, as used by Cisco IOS XE native models
+- name: Get the hostname from a native YANG model with RFC 7951 paths
+  nokia.openconfig.gnmi_get:
+    origin: rfc7951
+    path:
+      - /Cisco-IOS-XE-native:native/hostname
+    type: config
 ```
 ## Return Values
 

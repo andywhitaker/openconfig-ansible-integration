@@ -14,6 +14,7 @@ Commonly used variables (see the [reference](../reference/nokia.openconfig.grpc.
 | `ansible_grpc_ssl_target_name_override` | Name to verify when `ansible_host` does not match the router certificate |
 | `ansible_grpc_validate_certs` | `false` trusts the certificate the router presents at connect time (lab only) |
 | `ansible_gnmi_encoding` | `JSON` or `JSON_IETF`, instead of selecting the encoding from the Capabilities response |
+| `ansible_gnmi_origin` | Origin of gNMI paths that do not name one, for example `openconfig` |
 
 The channel uses TLS when a CA bundle or client certificate is configured, or when `ansible_grpc_validate_certs` is `false`. Otherwise it is a plain-text channel. `ansible_network_os` is not used: paths, models and encodings are explicit in the module options.
 
@@ -28,7 +29,22 @@ There is one module per gNMI RPC. Option names are the field names of the reques
 | [Set](https://github.com/openconfig/reference/blob/master/rpc/gnmi/gnmi-specification.md#34-modifying-state) | [`gnmi_set`](../reference/nokia.openconfig.gnmi_set.md) | `update`, `replace`, `delete`, `request_file`, commit options, `backup` |
 | [Subscribe](https://github.com/openconfig/reference/blob/master/rpc/gnmi/gnmi-specification.md#35-subscribing-to-telemetry-updates) | [`gnmi_subscribe`](../reference/nokia.openconfig.gnmi_subscribe.md) | `path`, `subscription`, `mode`, `stream_mode`, `sample_interval`, `duration`, `config_subscription` |
 
-Paths are gNMI path strings such as `/interface[name=ethernet-1/1]/description`. A path can name its origin, for example `openconfig:/interfaces/interface[name=ethernet-1/1]`.
+Paths are gNMI path strings such as `/interface[name=ethernet-1/1]/description`.
+
+### Origin
+
+The origin names the schema of a path, for example `openconfig` for OpenConfig models. Set it once with the `origin` option instead of in every path:
+
+```yaml
+- name: Read OpenConfig state
+  nokia.openconfig.gnmi_get:
+    origin: openconfig
+    path:
+      - /system/state/hostname
+      - /interfaces/interface[name=ethernet-1/1]/state/oper-status
+```
+
+A path can still name its own origin, as in `openconfig:/lldp`, and `ansible_gnmi_origin` sets a default for all gNMI tasks of a host. See [Platform Notes](platform-notes.md#paths-and-origins) for the rules and common origins.
 
 ### Extensions
 
@@ -46,10 +62,7 @@ These apply to [`gnmi_set`](../reference/nokia.openconfig.gnmi_set.md):
 - In check mode the `SetRequest` is built and returned without sending it, and the task reports `changed: false`. [`gnmi_subscribe`](../reference/nokia.openconfig.gnmi_subscribe.md) is skipped in check mode; use [`gnmi_get`](../reference/nokia.openconfig.gnmi_get.md) for read-only checks.
 - With `--diff`, a task that changes the configuration returns `diff.before` and `diff.after` as JSON strings.
 
-### SR OS notes
-
-- SR OS advertises the `JSON_IETF` encoding, which requires member names qualified with the YANG module in container values, for example `nokia-conf:contact`. Without them, SR OS rejects an update with `Missing namespace`. Set `encoding: json` on [`gnmi_set`](../reference/nokia.openconfig.gnmi_set.md) to send plain member names.
-- SR OS accepts the ConfigSubscription extension in `STREAM` mode only.
+Platform differences, such as the namespaces SR OS expects in `JSON_IETF` values, are collected in [Platform Notes](platform-notes.md).
 
 ## gNOI and gNSI modules
 
@@ -64,20 +77,18 @@ There is one module per RPC, named `gnoi_<service>_<rpc>` and `gnsi_<service>_<r
   register: ping
 ```
 
-The collection ships modules for the services below. See the module reference for the platforms, options and behaviour of each RPC.
+The modules are grouped by service. You only need the families your tasks use:
 
-| Service | Modules | SR OS | SR Linux |
-| --- | --- | --- | --- |
-| gNOI System | [`time`](../reference/nokia.openconfig.gnoi_system_time.md), [`ping`](../reference/nokia.openconfig.gnoi_system_ping.md), [`traceroute`](../reference/nokia.openconfig.gnoi_system_traceroute.md), [`reboot`](../reference/nokia.openconfig.gnoi_system_reboot.md), [`cancel_reboot`](../reference/nokia.openconfig.gnoi_system_cancel_reboot.md), [`reboot_status`](../reference/nokia.openconfig.gnoi_system_reboot_status.md), [`switch_control_processor`](../reference/nokia.openconfig.gnoi_system_switch_control_processor.md), [`kill_process`](../reference/nokia.openconfig.gnoi_system_kill_process.md), [`set_package`](../reference/nokia.openconfig.gnoi_system_set_package.md) | yes | yes |
-| gNOI File | [`get`](../reference/nokia.openconfig.gnoi_file_get.md), [`put`](../reference/nokia.openconfig.gnoi_file_put.md), [`stat`](../reference/nokia.openconfig.gnoi_file_stat.md), [`remove`](../reference/nokia.openconfig.gnoi_file_remove.md), [`transfer_to_remote`](../reference/nokia.openconfig.gnoi_file_transfer_to_remote.md) | yes | yes |
-| gNOI OS | [`install`](../reference/nokia.openconfig.gnoi_os_install.md), [`activate`](../reference/nokia.openconfig.gnoi_os_activate.md), [`verify`](../reference/nokia.openconfig.gnoi_os_verify.md) | no | yes |
-| gNOI FactoryReset | [`start`](../reference/nokia.openconfig.gnoi_factory_reset_start.md) | yes | yes |
-| gNOI Healthz | [`get`](../reference/nokia.openconfig.gnoi_healthz_get.md), [`list`](../reference/nokia.openconfig.gnoi_healthz_list.md), [`acknowledge`](../reference/nokia.openconfig.gnoi_healthz_acknowledge.md), [`check`](../reference/nokia.openconfig.gnoi_healthz_check.md), [`artifact`](../reference/nokia.openconfig.gnoi_healthz_artifact.md) | no | yes |
-| gNOI BGP | [`clear_bgp_neighbor`](../reference/nokia.openconfig.gnoi_bgp_clear_bgp_neighbor.md) | no | yes |
-| gNSI Authz | [`get`](../reference/nokia.openconfig.gnsi_authz_get.md), [`probe`](../reference/nokia.openconfig.gnsi_authz_probe.md), [`rotate`](../reference/nokia.openconfig.gnsi_authz_rotate.md) | no | yes |
-| gNSI Certz | [`get_profile_list`](../reference/nokia.openconfig.gnsi_certz_get_profile_list.md), [`add_profile`](../reference/nokia.openconfig.gnsi_certz_add_profile.md), [`delete_profile`](../reference/nokia.openconfig.gnsi_certz_delete_profile.md), [`can_generate_csr`](../reference/nokia.openconfig.gnsi_certz_can_generate_csr.md), [`rotate`](../reference/nokia.openconfig.gnsi_certz_rotate.md) | no | yes |
-| gNSI Pathz | [`get`](../reference/nokia.openconfig.gnsi_pathz_get.md), [`probe`](../reference/nokia.openconfig.gnsi_pathz_probe.md), [`rotate`](../reference/nokia.openconfig.gnsi_pathz_rotate.md) | no | yes |
-| gNSI Credentialz | [`get_public_keys`](../reference/nokia.openconfig.gnsi_credentialz_get_public_keys.md), [`can_generate_key`](../reference/nokia.openconfig.gnsi_credentialz_can_generate_key.md), [`rotate_account_credentials`](../reference/nokia.openconfig.gnsi_credentialz_rotate_account_credentials.md), [`rotate_host_parameters`](../reference/nokia.openconfig.gnsi_credentialz_rotate_host_parameters.md) | no | yes |
+| Family | Use it to | Typical modules |
+| --- | --- | --- |
+| gNOI System | Ping, traceroute, time, reboot, switchover | [`gnoi_system_ping`](../reference/nokia.openconfig.gnoi_system_ping.md), [`gnoi_system_reboot`](../reference/nokia.openconfig.gnoi_system_reboot.md) |
+| gNOI File | Copy files to and from the router | [`gnoi_file_put`](../reference/nokia.openconfig.gnoi_file_put.md), [`gnoi_file_get`](../reference/nokia.openconfig.gnoi_file_get.md) |
+| gNOI OS | Install, activate and verify software | [`gnoi_os_install`](../reference/nokia.openconfig.gnoi_os_install.md), [`gnoi_os_activate`](../reference/nokia.openconfig.gnoi_os_activate.md) |
+| gNOI Healthz | Component health and debug artifacts | [`gnoi_healthz_get`](../reference/nokia.openconfig.gnoi_healthz_get.md) |
+| gNOI FactoryReset, BGP | Factory reset, clear a BGP session | [`gnoi_factory_reset_start`](../reference/nokia.openconfig.gnoi_factory_reset_start.md), [`gnoi_bgp_clear_bgp_neighbor`](../reference/nokia.openconfig.gnoi_bgp_clear_bgp_neighbor.md) |
+| gNSI | gRPC and path authorization, TLS profiles, credentials | [`gnsi_certz_rotate`](../reference/nokia.openconfig.gnsi_certz_rotate.md), [`gnsi_authz_rotate`](../reference/nokia.openconfig.gnsi_authz_rotate.md) |
+
+The [reference](../reference/index.md) lists every module. [Platform Notes](platform-notes.md#services-per-platform) shows which services SR OS and SR Linux support.
 
 Read-only RPCs run in check mode and report `changed: false`. All other RPCs are skipped in check mode and report `changed: true` when they run.
 

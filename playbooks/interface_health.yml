@@ -1,0 +1,116 @@
+---
+# Checks the interfaces of every router using the OpenConfig interfaces model
+# and reports the ones that need attention:
+#   - administratively up but operationally not up
+#   - error or discard counters above the thresholds
+#
+# Reports, written on the controller:
+#   <report_dir>/interface_health.csv   one row per interface
+#   <report_dir>/interface_health.json  the same data, for further automation
+#
+# Variables:
+#   interface_names     only check these interfaces (default all)
+#   max_errors          in-errors plus out-errors above which an interface is
+#                       reported (default 0)
+#   max_discards        in-discards plus out-discards (default: not checked)
+#   report_dir          default ./reports
+#   interfaces_origin   default openconfig; set to "" for routers that
+#                       expect OpenConfig paths without origin
+#   fail_on_issues      fail routers with issues (default false)
+#   target              host pattern (default all)
+#
+#   ansible-playbook -i inventory.yml nokia.openconfig.interface_health
+- name: Interface health
+  hosts: "{{ target | default('all') }}"
+  gather_facts: false
+
+  vars:
+    report_dir: "{{ lookup('ansible.builtin.env', 'PWD') }}/reports"
+    interfaces_origin: openconfig
+    interface_names: []
+    max_errors: 0
+    max_discards: -1
+    fail_on_issues: false
+
+  tasks:
+    - name: Read the interface state
+      nokia.openconfig.gnmi_get:
+        path: >-
+          {{ ['/interfaces/interface/state'] if not interface_names
+             else interface_names | map('regex_replace', '^', '/interfaces/interface[name=') | map('regex_replace', '$', ']/state') | list }}
+        origin: "{{ interfaces_origin }}"
+        type: state
+      register: interface_state
+
+    - name: Evaluate the interfaces
+      ansible.builtin.set_fact:
+        interface_report: >-
+          {%- set tree = interface_state.output | nokia.openconfig.strip_yang_prefixes -%}
+          {%- set tree = tree.interfaces | default(tree) -%}
+          {%- set ns = namespace(rows=[]) -%}
+          {%- for intf in tree.interface | default([]) -%}
+          {%- set s = intf.state | default({}) -%}
+          {%- set c = s.counters | default({}) -%}
+          {%- set admin = (s['admin-status'] | default('') | string).split(':') | last -%}
+          {%- set oper = (s['oper-status'] | default('') | string).split(':') | last -%}
+          {%- set errors = (c['in-errors'] | default(0) | int) + (c['out-errors'] | default(0) | int) -%}
+          {%- set discards = (c['in-discards'] | default(0) | int) + (c['out-discards'] | default(0) | int) -%}
+          {%- set issues = [] if admin != 'UP' or oper == 'UP' else ['oper ' ~ (oper | lower or 'unknown')] -%}
+          {%- set issues = issues + ([errors ~ ' errors'] if errors > max_errors | int else []) -%}
+          {%- set issues = issues + ([discards ~ ' discards'] if 0 <= max_discards | int < discards else []) -%}
+          {%- set ns.rows = ns.rows + [{
+                'host': inventory_hostname,
+                'interface': intf.name | default(s.name | default('')),
+                'description': s.description | default(''),
+                'admin_status': admin,
+                'oper_status': oper,
+                'errors': errors,
+                'discards': discards,
+                'last_change': s['last-change'] | default(''),
+                'issues': issues | join('; ')}] -%}
+          {%- endfor -%}
+          {{ ns.rows }}
+
+    - name: Show the interfaces that need attention
+      ansible.builtin.debug:
+        msg: >-
+          {{ (interface_report | selectattr('issues') | map(attribute='interface')
+              | zip(interface_report | selectattr('issues') | map(attribute='issues')) | map('join', ': ') | list)
+             or [(interface_report | length) ~ ' interfaces, no issues'] }}
+      changed_when: interface_report | selectattr('issues') | list | length > 0
+
+    - name: Write the reports
+      delegate_to: localhost
+      run_once: true
+      vars:
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+        rows: "{{ ansible_play_hosts | map('extract', hostvars, 'interface_report') | flatten }}"
+        columns: [host, interface, description, admin_status, oper_status, errors, discards, last_change, issues]
+      block:
+        - name: Create the report directory
+          ansible.builtin.file:
+            path: "{{ report_dir }}"
+            state: directory
+            mode: "0750"
+
+        - name: Write the CSV report
+          ansible.builtin.copy:
+            dest: "{{ report_dir }}/interface_health.csv"
+            mode: "0640"
+            content: |
+              {{ columns | join(',') }}
+              {% for row in rows %}
+              {{ columns | map('extract', row) | map('string') | map('regex_replace', ',', ';') | join(',') }}
+              {% endfor %}
+
+        - name: Write the JSON report
+          ansible.builtin.copy:
+            dest: "{{ report_dir }}/interface_health.json"
+            mode: "0640"
+            content: "{{ rows | to_nice_json }}\n"
+
+    - name: Fail on issues
+      ansible.builtin.fail:
+        msg: "{{ interface_report | selectattr('issues') | list | length }} interface(s) on {{ inventory_hostname }} need attention"
+      when: fail_on_issues | bool and interface_report | selectattr('issues') | list | length > 0

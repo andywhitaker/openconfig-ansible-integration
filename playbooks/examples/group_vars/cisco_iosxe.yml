@@ -1,0 +1,11 @@
+---
+# OpenConfig is the default origin. Native models use origin rfc7951 with the
+# module-qualified first element, for example
+# /Cisco-IOS-XE-native:native/hostname; set origin: rfc7951 on those tasks.
+ansible_connection: nokia.openconfig.grpc
+ansible_port: 9339
+ansible_user: admin
+ansible_password: "{{ vault_iosxe_password }}"
+ansible_root_certificates_file: ./certs/iosxe-ca.pem
+ansible_gnmi_encoding: JSON_IETF
+ansible_gnmi_origin: openconfig

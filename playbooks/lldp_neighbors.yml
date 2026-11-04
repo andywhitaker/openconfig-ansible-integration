@@ -1,0 +1,128 @@
+---
+# Collects the LLDP neighbors of every router from the OpenConfig LLDP model,
+# writes a topology report and optionally checks the cabling.
+#
+# Reports, written on the controller:
+#   <report_dir>/lldp_neighbors.csv   one row per link
+#   <report_dir>/lldp_neighbors.json  the same data, for further automation
+#
+# Cabling check: define expected_neighbors per router (host_vars) as a list of
+#   - interface: ethernet-1/1
+#     neighbor: spine1           system name of the neighbor
+#     port: ethernet-1/49        optional, port ID or description of the neighbor
+# Missing or wrong links are reported, and fail the router with fail_on_mismatch.
+#
+# Variables:
+#   report_dir        default ./reports
+#   lldp_origin       default openconfig; set to "" for routers that
+#                     expect OpenConfig paths without origin
+#   fail_on_mismatch  default false
+#   target            host pattern (default all)
+#
+#   ansible-playbook -i inventory.yml nokia.openconfig.lldp_neighbors
+- name: LLDP neighbors and cabling check
+  hosts: "{{ target | default('all') }}"
+  gather_facts: false
+
+  vars:
+    report_dir: "{{ lookup('ansible.builtin.env', 'PWD') }}/reports"
+    lldp_origin: openconfig
+    expected_neighbors: []
+    fail_on_mismatch: false
+
+  tasks:
+    - name: Read the LLDP neighbors
+      nokia.openconfig.gnmi_get:
+        path:
+          - /lldp/interfaces
+        origin: "{{ lldp_origin }}"
+        type: state
+      register: lldp
+
+    - name: Extract the neighbors
+      ansible.builtin.set_fact:
+        lldp_report: >-
+          {%- set tree = lldp.output | nokia.openconfig.strip_yang_prefixes -%}
+          {%- set tree = tree.lldp | default(tree) -%}
+          {%- set tree = tree.interfaces | default(tree) -%}
+          {%- set ns = namespace(rows=[]) -%}
+          {%- for intf in tree.interface | default([]) -%}
+          {%- for neighbor in (intf.neighbors | default({})).neighbor | default([]) -%}
+          {%- set state = neighbor.state | default(neighbor) -%}
+          {%- set ns.rows = ns.rows + [{
+                'host': inventory_hostname,
+                'interface': intf.name,
+                'neighbor': state['system-name'] | default(''),
+                'port': state['port-id'] | default(''),
+                'port_description': state['port-description'] | default(''),
+                'chassis_id': state['chassis-id'] | default(''),
+                'management_address': state['management-address'] | default('')}] -%}
+          {%- endfor -%}
+          {%- endfor -%}
+          {{ ns.rows }}
+
+    - name: Check the cabling
+      ansible.builtin.set_fact:
+        mismatches: >-
+          {%- set ns = namespace(rows=[]) -%}
+          {%- for link in expected_neighbors -%}
+          {%- set found = lldp_report | selectattr('interface', 'equalto', link.interface)
+                                    | selectattr('neighbor', 'equalto', link.neighbor) | list -%}
+          {%- if link.port is defined -%}
+          {%- set found = found | selectattr('port', 'equalto', link.port) | list
+                          + found | selectattr('port_description', 'equalto', link.port) | list -%}
+          {%- endif -%}
+          {%- if not found -%}
+          {%- set actual = lldp_report | selectattr('interface', 'equalto', link.interface) | list -%}
+          {%- set ns.rows = ns.rows + [link.interface ~ ': expected ' ~ link.neighbor ~ (' ' ~ link.port if link.port is defined else '')
+                                       ~ ', found ' ~ ((actual | map(attribute='neighbor') | zip(actual | map(attribute='port'))
+                                                         | map('join', ' ') | join(', ')) or 'nothing')] -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ ns.rows }}
+
+    - name: Show the neighbors
+      ansible.builtin.debug:
+        msg: "{{ lldp_report | map(attribute='interface') | zip(lldp_report | map(attribute='neighbor'), lldp_report | map(attribute='port'))
+                 | map('join', '  ') | list or ['no LLDP neighbors'] }}"
+
+    - name: Write the reports
+      delegate_to: localhost
+      run_once: true
+      vars:
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+        links: "{{ ansible_play_hosts | map('extract', hostvars, 'lldp_report') | flatten }}"
+        columns: [host, interface, neighbor, port, port_description, chassis_id, management_address]
+      block:
+        - name: Create the report directory
+          ansible.builtin.file:
+            path: "{{ report_dir }}"
+            state: directory
+            mode: "0750"
+
+        - name: Write the CSV report
+          ansible.builtin.copy:
+            dest: "{{ report_dir }}/lldp_neighbors.csv"
+            mode: "0640"
+            content: |
+              {{ columns | join(',') }}
+              {% for link in links %}
+              {{ columns | map('extract', link) | map('string') | map('regex_replace', ',', ';') | join(',') }}
+              {% endfor %}
+
+        - name: Write the JSON report
+          ansible.builtin.copy:
+            dest: "{{ report_dir }}/lldp_neighbors.json"
+            mode: "0640"
+            content: "{{ links | to_nice_json }}\n"
+
+    - name: Report cabling mismatches
+      ansible.builtin.debug:
+        msg: "{{ mismatches }}"
+      when: mismatches | length > 0
+
+    - name: Fail on cabling mismatches
+      ansible.builtin.fail:
+        msg: "{{ mismatches | length }} expected link(s) not found on {{ inventory_hostname }}"
+      when: fail_on_mismatch | bool and mismatches | length > 0

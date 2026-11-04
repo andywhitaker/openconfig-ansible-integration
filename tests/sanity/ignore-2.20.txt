@@ -1,8 +1,12 @@
 plugins/connection/grpc.py validate-modules:missing-gplv3-license # BSD-3-Clause licensed collection
+plugins/connection/grpc.py validate-modules:version-added-must-be-major-or-minor # origin options added in the 2.0.1 release
 plugins/modules/gnmi_capabilities.py validate-modules:missing-gplv3-license # BSD-3-Clause licensed collection
 plugins/modules/gnmi_get.py validate-modules:missing-gplv3-license # BSD-3-Clause licensed collection
+plugins/modules/gnmi_get.py validate-modules:version-added-must-be-major-or-minor # origin options added in the 2.0.1 release
 plugins/modules/gnmi_set.py validate-modules:missing-gplv3-license # BSD-3-Clause licensed collection
+plugins/modules/gnmi_set.py validate-modules:version-added-must-be-major-or-minor # origin options added in the 2.0.1 release
 plugins/modules/gnmi_subscribe.py validate-modules:missing-gplv3-license # BSD-3-Clause licensed collection
+plugins/modules/gnmi_subscribe.py validate-modules:version-added-must-be-major-or-minor # origin options added in the 2.0.1 release
 plugins/modules/gnoi_bgp_clear_bgp_neighbor.py validate-modules:missing-gplv3-license # BSD-3-Clause licensed collection
 plugins/modules/gnoi_factory_reset_start.py validate-modules:missing-gplv3-license # BSD-3-Clause licensed collection
 plugins/modules/gnoi_file_get.py validate-modules:missing-gplv3-license # BSD-3-Clause licensed collection

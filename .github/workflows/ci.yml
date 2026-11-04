@@ -71,6 +71,18 @@ jobs:
         working-directory: ${{ env.COLLECTION_PATH }}
         run: ansible-test units --venv --python ${{ matrix.python }} -v --color
 
+      # Runs the shipped playbooks by name, as users do after installing
+      - name: Syntax check of the shipped playbooks
+        working-directory: ${{ env.COLLECTION_PATH }}
+        env:
+          ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}
+        run: |
+          ansible-inventory -i playbooks/examples/inventory.yml --graph
+          for playbook in playbooks/*.yml; do
+            ansible-playbook --syntax-check -i playbooks/examples/inventory.yml \
+              "nokia.openconfig.$(basename "$playbook" .yml)"
+          done
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4

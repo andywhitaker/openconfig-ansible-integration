@@ -1,0 +1,111 @@
+---
+# Upgrades routers with gNOI OS, one router at a time by default:
+#   1. skip routers that already run os_version
+#   2. back up the configuration
+#   3. transfer and validate the image (OS.Install)
+#   4. activate it and reboot (OS.Activate)
+#   5. wait until the router runs os_version
+#
+# gNOI OS is supported on SR Linux hardware; the SR Linux simulator and SR OS
+# reject it. Run with --check to see which routers would be upgraded.
+#
+# Variables:
+#   os_image          OS image on the controller (required)
+#   os_version        version string of the image (required)
+#   no_reboot         activate without rebooting (default false)
+#   reboot_timeout    seconds to wait for the new version (default 1200)
+#   backup_dir        directory for configuration backups (default ./backup)
+#   batch_size        routers upgraded at the same time (default 1)
+#   target            host pattern (default all)
+#
+# Large images need a longer ansible_command_timeout for the transfer.
+#
+#   ansible-playbook -i inventory.yml nokia.openconfig.os_upgrade \
+#     -e os_image=./srlinux-25.10.1.bin -e os_version=25.10.1
+- name: OS upgrade with gNOI
+  hosts: "{{ target | default('all') }}"
+  gather_facts: false
+  serial: "{{ batch_size | default(1) }}"
+  max_fail_percentage: 0
+
+  vars:
+    backup_dir: "{{ lookup('ansible.builtin.env', 'PWD') }}/backup"
+    no_reboot: false
+    reboot_timeout: 1200
+    poll_interval: 30
+
+  tasks:
+    - name: Check the variables
+      ansible.builtin.assert:
+        that:
+          - os_image is defined
+          - os_version is defined
+        fail_msg: Define os_image and os_version, see the comment at the top of this playbook
+        quiet: true
+
+    - name: Check the image on the controller
+      ansible.builtin.stat:
+        path: "{{ os_image }}"
+      delegate_to: localhost
+      run_once: true
+      vars:
+        ansible_connection: local
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      register: image
+      failed_when: not image.stat.exists
+
+    - name: Read the running version
+      nokia.openconfig.gnoi_os_verify:
+      register: running
+
+    - name: Skip routers that run the version already
+      ansible.builtin.meta: end_host
+      when: (running.output | from_json).version | default('') == os_version
+
+    - name: Show the planned upgrade
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ (running.output | from_json).version | default('unknown') }} -> {{ os_version }}"
+
+    - name: Back up the configuration
+      nokia.openconfig.gnmi_set:
+        backup: true
+        backup_options:
+          dir_path: "{{ backup_dir }}"
+      register: backup
+
+    - name: Transfer and validate the image
+      nokia.openconfig.gnoi_os_install:
+        local_path: "{{ os_image }}"
+        os_version: "{{ os_version }}"
+      register: install
+      failed_when: >-
+        install is failed or
+        (not ansible_check_mode and not (install.output | from_json | selectattr('validated', 'defined') | list))
+
+    - name: Activate the version
+      nokia.openconfig.gnoi_os_activate:
+        os_version: "{{ os_version }}"
+        no_reboot: "{{ no_reboot | bool }}"
+      register: activate
+      # The router may close the connection while it reboots
+      failed_when: >-
+        not ansible_check_mode and (
+          ('activateError' in (activate.output | default('')))
+          or (activate.output is not defined and (no_reboot | bool or 'UNAVAILABLE' not in activate.msg | default(''))))
+
+    - name: Reconnect after the reboot
+      ansible.builtin.meta: reset_connection
+
+    - name: Wait for the new version
+      nokia.openconfig.gnoi_os_verify:
+      register: upgraded
+      until: upgraded is succeeded and (upgraded.output | from_json).version | default('') == os_version
+      retries: "{{ (reboot_timeout | int / poll_interval | int) | round(0, 'ceil') | int }}"
+      delay: "{{ poll_interval | int }}"
+      when: not no_reboot | bool and not ansible_check_mode
+
+    - name: Summarize
+      ansible.builtin.debug:
+        msg:
+          - "{{ inventory_hostname }} runs {{ os_version if not no_reboot | bool else 'the old version until reboot; ' ~ os_version ~ ' is activated' }}"
+          - "Configuration backup: {{ backup.backup_path | default('none (check mode)') }}"
